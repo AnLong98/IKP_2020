@@ -6,13 +6,19 @@
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27016"
 #define MAX_CLIENTS 10
-#define BUFFER_SIZE 20
+#define MAX_QUEUE 20
 
+using namespace std;
 void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket, fd_set* readfds);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
+//Global variables
+HANDLE EmptyQueue;						  // Semaphore which indicates how many (if any) empty spaces are available on queue.
+HANDLE FullQueue;						  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
+HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
+CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 
-std::queue<SOCKET> incomingRequestsQueue;
+queue<SOCKET> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
 
 int  main(void)
 {
@@ -198,5 +204,16 @@ void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET l
 
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 {
+	const int semaphoreNum = 2;
+	HANDLE semaphores[semaphoreNum] = { FinishSignal, FullQueue };
+	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
+		
+		EnterCriticalSection(&QueueAccess);
+		SOCKET requestSocket = incomingRequestsQueue.front();
+		incomingRequestsQueue.pop();
+		LeaveCriticalSection(&QueueAccess);
 
+		//TODO Implement recv functions and call them here.
+	}
+	return 0;
 }
