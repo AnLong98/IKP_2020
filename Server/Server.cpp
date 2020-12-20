@@ -210,6 +210,7 @@ void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET l
 
 }
 
+
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 {
 	const int semaphoreNum = 2;
@@ -221,8 +222,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		incomingRequestsQueue.pop();
 		LeaveCriticalSection(&QueueAccess);
 
+		FILE_DATA fileData;
+		FILE_PART* fileParts;
 		FILE_REQUEST fileRequest;
 		FILE_RESPONSE fileResponse;
+		int serverOwnedParts[FILE_PARTS];
 
 		int result = RecvFileRequest(requestSocket, &fileRequest);
 
@@ -237,12 +241,12 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 		if ( sizeFound > 0)//File is loaded and can be given back to client
 		{
-			FILE_DATA fileData = fileInfoMap.find(fileRequest.fileName)->second;
+			fileData = fileInfoMap.find(fileRequest.fileName)->second;
 			unsigned int clientPartsCount = 0;
 			unsigned int serverPartsCount = 0;
 			int partToStore = -1;
 			unsigned int partsTotal;
-			(FILE_PARTS < fileData.partArraySize) ? partsTotal = FILE_PARTS : partsTotal = fileData.partArraySize;
+			(FILE_PARTS < fileData.partsOnClients) ? partsTotal = FILE_PARTS : partsTotal = fileData.partArraySize;
 
 			for (int i = 0; i < partsTotal; i++)
 			{
@@ -266,8 +270,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 			FILE_PART clientsFilePart;
 			clientsFilePart.isServerOnly = 0;
-			SOCKADDR_IN clientInfo = { 0 };
-			int addrsize = sizeof(clientInfo);
+			//Add client socket info to struct
 
 			serverPartsCount = FILE_PARTS - clientPartsCount;
 			fileResponse.fileExists = 1;
@@ -275,7 +278,6 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			{
 				fileResponse.filePartToStore = partToStore;
 				fileData.filePartDataArray[partToStore].isServerOnly = 0;
-				fileData.filePartDataArray[partToStore].
 			}
 			else
 			{
@@ -289,27 +291,86 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			size_t fileSize;
 			int result = ReadFileIntoMemory(fileRequest.fileName, fileBuffer, &fileSize);
 
-			if (result != 0)
+			if (result != 0)//File probably doesn't exist on server
 			{
 				fileResponse.fileExists = 0;
 				fileResponse.clientPartsNumber = 0;
-				fileResponse.clientParts;
 				fileResponse.filePartToStore = 0;
 				fileResponse.serverPartsNumber = 0;
 			}
-			else
+			else //File is on server and loaded into buffer
 			{
+				DivideFileIntoParts(fileBuffer, fileSize, FILE_PARTS, fileParts);
 				fileResponse.fileExists = 1;
 				fileResponse.clientPartsNumber = 0;
-				fileResponse.clientParts;
 				fileResponse.filePartToStore = 0;
-				fileResponse.serverPartsNumber = 0;
+				fileResponse.serverPartsNumber = FILE_PARTS;
+
+				//Add server owned part indexes
+				for (int i = 0; i < FILE_PARTS; i++)serverOwnedParts[i] = i;
+
+				fileData.filePointer = fileBuffer;
+				fileData.filePartDataArray = fileParts;
+				fileData.partArraySize = 2 * FILE_PARTS;
+				fileData.partsOnClients = 0;
+			}
+
+			fileInfoMap[fileRequest.fileName] = fileData;
+		}
+
+		SendFileResponse(requestSocket, fileResponse);
+
+		for (int i = 0; i < fileResponse.serverPartsNumber; i++)
+		{
+			int partIndex = serverOwnedParts[i];
+			FILE_PART partToSend = fileParts[partIndex];
+			if (SendFilePart(requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
+			{
+				//HANDLE SEND ERROR HERE
 			}
 		}
 
-		
-
-
+		ReleaseSemaphore(&EmptyQueue, 1, NULL);
 	}
 	return 0;
+}
+
+
+int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray)
+{
+	size_t partSize = fileSize / parts;
+	size_t totalSizeAccounted = 0;
+
+	unallocatedPartsArray = (FILE_PART*)malloc(sizeof(FILE_PART) * parts * 2); //Allocate double the size
+
+	if (unallocatedPartsArray == NULL)
+	{
+		//TODO: handle out of memory
+		return -1;
+	}
+
+	for (int i = 0; i < parts; i++)
+	{
+		if (i == parts - 1)
+		{
+			unallocatedPartsArray[i].partSize = fileSize - totalSizeAccounted;
+		}
+		else
+		{
+			unallocatedPartsArray[i].partSize = partSize;
+		}
+		unallocatedPartsArray[i].filePartNumber = 0;
+		unallocatedPartsArray[i].isServerOnly = 1; //Assign part to server first
+		unallocatedPartsArray[i].partSize = partSize;
+		unallocatedPartsArray[i].partStartPointer = loadedFileBuffer + i * partSize;
+		totalSizeAccounted += partSize;
+	}
+
+	return 0;
+}
+
+
+int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
+{
+
 }

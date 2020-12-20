@@ -17,6 +17,7 @@ typedef struct FILE_DATA
 	char* filePointer;
 	FILE_PART* filePartDataArray;
 	unsigned int partArraySize;
+	unsigned int partsOnClients;
 };
 
 typedef struct CLIENT_INFO

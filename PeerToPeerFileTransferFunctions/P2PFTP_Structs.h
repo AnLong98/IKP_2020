@@ -11,6 +11,7 @@ typedef struct FILE_PART_REQUEST
 typedef struct FILE_REQUEST
 {
 	char fileName[MAX_FILE_NAME];
+	SOCKADDR_IN requesterListenAddress;
 };
 
 typedef struct FILE_RESPONSE
