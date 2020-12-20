@@ -16,10 +16,12 @@ typedef struct FILE_DATA
 {
 	char* filePointer;
 	FILE_PART* filePartDataArray;
+	unsigned int partArraySize;
 };
 
 typedef struct CLIENT_INFO
 {
 	SOCKET clientSocket;
 	FILE_DATA* clientOwnedFiles;
+	unsigned int ownedFilesCount;
 };

@@ -6,6 +6,7 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../FTPServerFunctions/Server_Structs.h"
+#include "../FileIO_Functions/FileIO.h"
 
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27016"
@@ -221,6 +222,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		LeaveCriticalSection(&QueueAccess);
 
 		FILE_REQUEST fileRequest;
+		FILE_RESPONSE fileResponse;
 
 		int result = RecvFileRequest(requestSocket, &fileRequest);
 
@@ -229,23 +231,83 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			//The was an error and handle it
 		}
 
-		if (fileInfoMap.count(fileRequest.fileName) > 0)//File is loaded and can be given back to client
+		EnterCriticalSection(&QueueAccess);
+		size_t sizeFound = fileInfoMap.count(fileRequest.fileName);
+		LeaveCriticalSection(&QueueAccess);
+
+		if ( sizeFound > 0)//File is loaded and can be given back to client
 		{
 			FILE_DATA fileData = fileInfoMap.find(fileRequest.fileName)->second;
+			unsigned int clientPartsCount = 0;
+			unsigned int serverPartsCount = 0;
+			int partToStore = -1;
+			unsigned int partsTotal;
+			(FILE_PARTS < fileData.partArraySize) ? partsTotal = FILE_PARTS : partsTotal = fileData.partArraySize;
+
+			for (int i = 0; i < partsTotal; i++)
+			{
+				FILE_PART filePart = fileData.filePartDataArray[i];
+				
+				if (filePart.isServerOnly == 0)
+				{
+					FILE_PART_INFO  partInfo;
+					partInfo.clientOwnerAddress = filePart.clientOwnerAddress;
+					partInfo.partNumber = filePart.filePartNumber;
+
+					fileResponse.clientParts[clientPartsCount] = partInfo;
+					fileResponse.clientPartsNumber = clientPartsCount;
+
+				}
+				else if (partToStore == -1)
+				{
+					partToStore = i;
+				}
+			}
+
+			FILE_PART clientsFilePart;
+			clientsFilePart.isServerOnly = 0;
+			SOCKADDR_IN clientInfo = { 0 };
+			int addrsize = sizeof(clientInfo);
+
+			serverPartsCount = FILE_PARTS - clientPartsCount;
+			fileResponse.fileExists = 1;
+			if (partToStore != -1)
+			{
+				fileResponse.filePartToStore = partToStore;
+				fileData.filePartDataArray[partToStore].isServerOnly = 0;
+				fileData.filePartDataArray[partToStore].
+			}
+			else
+			{
+
+			}
+			
 		}
 		else // We need to load the file first
 		{
-			FILE* pFile;
-			pFile = fopen(fileRequest.fileName, "rb");
+			char* fileBuffer;
+			size_t fileSize;
+			int result = ReadFileIntoMemory(fileRequest.fileName, fileBuffer, &fileSize);
 
-			if()
-
-			fseek(pFile, 0L, SEEK_END);
-			size_t size = ftell(pFile);
-			fseek(pFile, 0L, SEEK_SET);
-
-
+			if (result != 0)
+			{
+				fileResponse.fileExists = 0;
+				fileResponse.clientPartsNumber = 0;
+				fileResponse.clientParts;
+				fileResponse.filePartToStore = 0;
+				fileResponse.serverPartsNumber = 0;
+			}
+			else
+			{
+				fileResponse.fileExists = 1;
+				fileResponse.clientPartsNumber = 0;
+				fileResponse.clientParts;
+				fileResponse.filePartToStore = 0;
+				fileResponse.serverPartsNumber = 0;
+			}
 		}
+
+		
 
 
 	}
