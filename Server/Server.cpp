@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <queue>
+#include <unordered_map>
+#include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
+#include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
+#include "../FTPServerFunctions/Server_Structs.h"
 
 #define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27016"
@@ -17,8 +21,11 @@ HANDLE EmptyQueue;						  // Semaphore which indicates how many (if any) empty s
 HANDLE FullQueue;						  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
 HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
 CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
+CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
 
+//Data structures
 queue<SOCKET> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
+unordered_map<string, FILE_DATA> fileInfoMap;
 
 int  main(void)
 {
@@ -213,7 +220,34 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		incomingRequestsQueue.pop();
 		LeaveCriticalSection(&QueueAccess);
 
-		//TODO Implement recv functions and call them here.
+		FILE_REQUEST fileRequest;
+
+		int result = RecvFileRequest(requestSocket, &fileRequest);
+
+		if (result == -1)
+		{
+			//The was an error and handle it
+		}
+
+		if (fileInfoMap.count(fileRequest.fileName) > 0)//File is loaded and can be given back to client
+		{
+			FILE_DATA fileData = fileInfoMap.find(fileRequest.fileName)->second;
+		}
+		else // We need to load the file first
+		{
+			FILE* pFile;
+			pFile = fopen(fileRequest.fileName, "rb");
+
+			if()
+
+			fseek(pFile, 0L, SEEK_END);
+			size_t size = ftell(pFile);
+			fseek(pFile, 0L, SEEK_SET);
+
+
+		}
+
+
 	}
 	return 0;
 }

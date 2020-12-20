@@ -19,18 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="P2PFTP.h" />
-    <ClInclude Include="P2PFTP_Structs.h" />
-    <ClInclude Include="P2PLimitations.h" />
+    <ClInclude Include="FileIO.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="P2PFTP.cpp" />
+    <ClCompile Include="FileIO.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{FA3640AE-E169-4C0F-991C-4077DA2F3424}</ProjectGuid>
+    <ProjectGuid>{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>PeerToPeerFileTransferFunctions</RootNamespace>
+    <RootNamespace>FileIOFunctions</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
