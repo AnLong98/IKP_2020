@@ -1,6 +1,4 @@
-#ifdef _MSC_VER
-#define _CRT_SECURE_NO_WARNINGS
-#endif
+#pragma once
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,7 +9,6 @@
 #include "../FTPServerFunctions/Server_Structs.h"
 #include "../FileIO_Functions/FileIO.h"
 
-#define DEFAULT_BUFLEN 512
 #define DEFAULT_PORT "27016"
 #define MAX_CLIENTS 10
 #define MAX_QUEUE 20
