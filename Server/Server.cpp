@@ -218,7 +218,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
 		
 		EnterCriticalSection(&QueueAccess);
-		SOCKET requestSocket = incomingRequestsQueue.front();
+		SOCKET requestSocket = incomingRequestsQueue.front();  //Get request from queue
 		incomingRequestsQueue.pop();
 		LeaveCriticalSection(&QueueAccess);
 
@@ -228,20 +228,23 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		FILE_RESPONSE fileResponse;
 		int serverOwnedParts[FILE_PARTS];
 
+		//Receive request from socket
 		int result = RecvFileRequest(requestSocket, &fileRequest);
-
 		if (result == -1)
 		{
 			//The was an error and handle it
 		}
 
-		EnterCriticalSection(&QueueAccess);
+		EnterCriticalSection(&FileMapAccess);
 		size_t sizeFound = fileInfoMap.count(fileRequest.fileName);
-		LeaveCriticalSection(&QueueAccess);
+		LeaveCriticalSection(&FileMapAccess);
 
 		if ( sizeFound > 0)//File is loaded and can be given back to client
 		{
+			EnterCriticalSection(&FileMapAccess);
 			fileData = fileInfoMap.find(fileRequest.fileName)->second;
+			LeaveCriticalSection(&FileMapAccess);
+
 			unsigned int clientPartsCount = 0;
 			unsigned int serverPartsCount = 0;
 			int partToStore = -1;
@@ -309,13 +312,16 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				//Add server owned part indexes
 				for (int i = 0; i < FILE_PARTS; i++)serverOwnedParts[i] = i;
 
+				//Init new File data structure for newly loaded file
 				fileData.filePointer = fileBuffer;
 				fileData.filePartDataArray = fileParts;
 				fileData.partArraySize = 2 * FILE_PARTS;
 				fileData.partsOnClients = 0;
 			}
 
+			//Add new file data structure to map, no need for CS because no one owns this structure yet
 			fileInfoMap[fileRequest.fileName] = fileData;
+			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
 		}
 
 		SendFileResponse(requestSocket, fileResponse);
@@ -366,11 +372,43 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 		totalSizeAccounted += partSize;
 	}
 
+	for (int i = parts; i < 2 * parts; i++)
+	{
+		unallocatedPartsArray[i].isServerOnly = 1;
+	}
+
 	return 0;
 }
 
 
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 {
+	int partAssigned = 0;
 
+	EnterCriticalSection(&FileMapAccess);
+	FILE_DATA fileData = fileInfoMap[fileName];
+	if (fileData.partArraySize == fileData.partArraySize)//Parts array is full and should be increased
+	{
+		fileData.filePartDataArray = (FILE_PART*)realloc(fileData.filePartDataArray, fileData.partArraySize + FILE_PARTS); //Increase array by the count of file parts
+		fileData.partArraySize += FILE_PARTS;
+	}
+	if (fileData.filePartDataArray == NULL)
+	{
+		//TODO Handle out of memory
+		return -1;
+	}
+	partAssigned = fileData.nextPartToAssign;
+	FILE_PART filePartToAssign = fileData.filePartDataArray[fileData.nextPartToAssign];							//Get data from first 10 assigned file parts
+	fileData.filePartDataArray[fileData.partsOnClients].clientOwnerAddress = clientInfo;						//Assign new client's connection info
+	fileData.filePartDataArray[fileData.partsOnClients].isServerOnly = 0;										//Mark as client owned
+	fileData.filePartDataArray[fileData.partsOnClients].partSize = filePartToAssign.partSize;					//Copy part size
+	fileData.filePartDataArray[fileData.partsOnClients].partStartPointer = filePartToAssign.partStartPointer;	//Copy buffer pointer
+	fileData.filePartDataArray[fileData.partsOnClients].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number
+	fileData.partsOnClients++;																					//Increase number of parts owned by clients
+	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
+
+	fileInfoMap[fileName] = fileData;																			//Save changes
+	LeaveCriticalSection(&FileMapAccess);
+
+	return partAssigned;
 }

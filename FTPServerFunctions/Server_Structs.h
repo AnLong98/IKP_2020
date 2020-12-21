@@ -18,6 +18,7 @@ typedef struct FILE_DATA
 	FILE_PART* filePartDataArray;
 	unsigned int partArraySize;
 	unsigned int partsOnClients;
+	unsigned int nextPartToAssign;
 };
 
 typedef struct CLIENT_INFO
