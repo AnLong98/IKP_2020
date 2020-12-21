@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -14,7 +17,11 @@
 #define MAX_QUEUE 20
 
 using namespace std;
+bool InitializeWindowsSockets();
 void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket, fd_set* readfds);
+int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray);
+int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
+int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
 //Global variables
@@ -38,7 +45,6 @@ int  main(void)
 	int iResult;
 	int socketsTaken = 0;
 	// Buffer used for storing incoming data
-	char recvbuf[DEFAULT_BUFLEN];
 	fd_set readfds;
 	unsigned long mode = 1; //non-blocking mode
 
@@ -223,7 +229,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		LeaveCriticalSection(&QueueAccess);
 
 		FILE_DATA fileData;
-		FILE_PART* fileParts;
+		FILE_PART* fileParts = NULL;
 		FILE_REQUEST fileRequest;
 		FILE_RESPONSE fileResponse;
 		int serverOwnedParts[FILE_PARTS];
@@ -244,53 +250,12 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			EnterCriticalSection(&FileMapAccess);
 			fileData = fileInfoMap.find(fileRequest.fileName)->second;
 			LeaveCriticalSection(&FileMapAccess);
-
-			unsigned int clientPartsCount = 0;
-			unsigned int serverPartsCount = 0;
-			int partToStore = -1;
-			unsigned int partsTotal;
-			(FILE_PARTS < fileData.partsOnClients) ? partsTotal = FILE_PARTS : partsTotal = fileData.partArraySize;
-
-			for (int i = 0; i < partsTotal; i++)
-			{
-				FILE_PART filePart = fileData.filePartDataArray[i];
-				
-				if (filePart.isServerOnly == 0)
-				{
-					FILE_PART_INFO  partInfo;
-					partInfo.clientOwnerAddress = filePart.clientOwnerAddress;
-					partInfo.partNumber = filePart.filePartNumber;
-
-					fileResponse.clientParts[clientPartsCount] = partInfo;
-					fileResponse.clientPartsNumber = clientPartsCount;
-
-				}
-				else if (partToStore == -1)
-				{
-					partToStore = i;
-				}
-			}
-
-			FILE_PART clientsFilePart;
-			clientsFilePart.isServerOnly = 0;
-			//Add client socket info to struct
-
-			serverPartsCount = FILE_PARTS - clientPartsCount;
-			fileResponse.fileExists = 1;
-			if (partToStore != -1)
-			{
-				fileResponse.filePartToStore = partToStore;
-				fileData.filePartDataArray[partToStore].isServerOnly = 0;
-			}
-			else
-			{
-
-			}
+			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts);
 			
 		}
 		else // We need to load the file first
 		{
-			char* fileBuffer;
+			char* fileBuffer = NULL;
 			size_t fileSize;
 			int result = ReadFileIntoMemory(fileRequest.fileName, fileBuffer, &fileSize);
 
@@ -380,7 +345,6 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 	return 0;
 }
 
-
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 {
 	int partAssigned = 0;
@@ -411,4 +375,43 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	LeaveCriticalSection(&FileMapAccess);
 
 	return partAssigned;
+}
+
+int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts)
+{
+	int serverOwnedPartsCount = 0;
+	int clientOwnedPartsCount = 0;
+	
+	for (int i = 0; i < FILE_PARTS; i++)
+	{
+		if (fileData.filePartDataArray[i].isServerOnly)
+		{
+			serverOwnedParts[serverOwnedPartsCount++] = i;
+		}
+		else
+		{
+			FILE_PART_INFO partInfo;
+			partInfo.partNumber = fileData.filePartDataArray[i].filePartNumber;
+			partInfo.clientOwnerAddress = request.requesterListenAddress;
+			response->clientParts[clientOwnedPartsCount++] = partInfo;
+		}	
+
+	}
+	response->fileExists = 1;
+	response->clientPartsNumber = clientOwnedPartsCount;
+	response->serverPartsNumber = serverOwnedPartsCount;
+
+	int assignedPart = AssignFilePartToClient(request.requesterListenAddress, request.fileName);
+	if (assignedPart == -1)
+	{
+		//HANDLE error
+		return -1;
+	}
+	else
+	{
+		response->filePartToStore = assignedPart;
+	}
+
+	return 0;
+
 }

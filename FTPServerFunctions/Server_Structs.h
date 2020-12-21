@@ -10,7 +10,7 @@ typedef struct FILE_PART
 	int isServerOnly;
 	unsigned int partSize;
 	char* partStartPointer;
-};
+}F_PART;
 
 typedef struct FILE_DATA
 {
@@ -19,11 +19,11 @@ typedef struct FILE_DATA
 	unsigned int partArraySize;
 	unsigned int partsOnClients;
 	unsigned int nextPartToAssign;
-};
+}F_DATA;
 
 typedef struct CLIENT_INFO
 {
 	SOCKET clientSocket;
 	FILE_DATA* clientOwnedFiles;
 	unsigned int ownedFilesCount;
-};
+}C_INFO;
