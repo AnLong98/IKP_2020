@@ -7,10 +7,10 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../FTPServerFunctions/Server_Structs.h"
+#include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
 #include "../FileIO_Functions/FileIO.h"
 
 #define DEFAULT_PORT "27016"
-#define MAX_CLIENTS 10
 #define MAX_QUEUE 20
 
 using namespace std;

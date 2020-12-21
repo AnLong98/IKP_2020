@@ -1,6 +1,6 @@
 #pragma once
 #include <ws2tcpip.h>
-#include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
+#include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 
 
 typedef struct FILE_PART

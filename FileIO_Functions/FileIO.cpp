@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS 1
 #include "../FileIO_Functions/FileIO.h"
 #include <stdlib.h>
 #include <stdio.h>
