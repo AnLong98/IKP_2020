@@ -132,7 +132,7 @@ int RecvFileRequest(SOCKET s, FILE_REQUEST* request)
 		//HANDLE
 		return -1;
 	}
-
+	memcpy(request, buffer, sizeof(FILE_REQUEST));
 	request->requesterListenAddress.sin_port = ntohs(request->requesterListenAddress.sin_port);
 
 	return 0;

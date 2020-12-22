@@ -1,4 +1,3 @@
-#pragma once
 #include <ws2tcpip.h>
 #include <winsock2.h>
 #include <stdlib.h>
@@ -10,7 +9,6 @@
 #include "../FTPServerFunctions/Server_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
 #include "../FileIO_Functions/FileIO.h"
-
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
 
@@ -120,7 +118,7 @@ int  main(void)
 
 	printf("Server initialized, waiting for clients.\n");
 
-	do
+	while(true)
 	{
 		FD_ZERO(&readfds);
 		FD_SET(listenSocket, &readfds);
@@ -153,13 +151,22 @@ int  main(void)
 			for (int i = 0; i < socketsTaken; i++)
 			{
 				if (FD_ISSET(acceptedSockets[i], &readfds))
-					incomingRequestsQueue.push(acceptedSockets[i]);
+				{
+					const int semaphoreNum = 2;
+					HANDLE semaphores[semaphoreNum] = { FinishSignal, EmptyQueue };
+					while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
+					{
+						incomingRequestsQueue.push(acceptedSockets[i]);
+						ReleaseSemaphore(FullQueue, 1, NULL);
+					}
+				}
+					
 			}
 
 		}
 
 
-	} while (1);
+	}
 
 	for (int i = 0; i < socketsTaken; i++)
 	{
