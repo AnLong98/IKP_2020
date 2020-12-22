@@ -1,5 +1,6 @@
 #pragma once
 #include <ws2tcpip.h>
+#include <winsock2.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <queue>
