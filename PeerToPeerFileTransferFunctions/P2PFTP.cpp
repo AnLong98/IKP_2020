@@ -6,7 +6,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 {
 	// #1. Send file part number
 	int iResult = send(s, (char*)htonl(partNumber), sizeof(int), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -14,7 +14,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 
 	// #2. Send file part size
 	iResult = send(s, (char*)htonl(length), sizeof(unsigned int), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -22,7 +22,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 
 	// #3. Send file part 
 	iResult = send(s, data, length, 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -37,7 +37,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 	char buffer[BUFFER];
 	// #1. Recv file part number
 	int iResult = recv(s, buffer, sizeof(int), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -46,7 +46,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 
 	// #2. Recv file part size
 	iResult = recv(s, buffer, sizeof(unsigned int), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -63,7 +63,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 
 	// #3. Recv file part 
 	iResult = recv(s, data, *length, 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -97,7 +97,7 @@ int RecvFilePartRequest(SOCKET s, FILE_PART_REQUEST* request)
 
 	// #1. Receive request
 	int iResult = recv(s, buffer, sizeof(FILE_PART_REQUEST), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -127,7 +127,7 @@ int RecvFileRequest(SOCKET s, FILE_REQUEST* request)
 {
 	char buffer[sizeof(FILE_REQUEST)];
 	int iResult = recv(s, buffer, sizeof(FILE_REQUEST), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;
@@ -168,7 +168,7 @@ int RecvFileResponse(SOCKET s, FILE_RESPONSE* response)
 	char buffer[sizeof(FILE_RESPONSE)];
 	// #1. Recv Response
 	int iResult = recv(s, buffer, sizeof(FILE_RESPONSE), 0);
-	if (iResult == SOCKET_ERROR)
+	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
 		return -1;

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <queue>
+#include <list>
 #include <unordered_map>
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
@@ -14,10 +15,13 @@
 
 using namespace std;
 bool InitializeWindowsSockets();
+int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds);
 void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket, fd_set* readfds);
 int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray);
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
+int AddClientInfo(SOCKET* socket, FILE_DATA data);
+int RemoveClient(SOCKET* clientSocket);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
 //Global variables
@@ -26,23 +30,31 @@ HANDLE FullQueue;						  // Semaphore which indicates how many (if any) sockets 
 HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
 CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
+CRITICAL_SECTION ClientListAccess;			  // Critical section for clients list access
+CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
 
 //Data structures
-queue<SOCKET> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
+queue<SOCKET*> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
 unordered_map<string, FILE_DATA> fileInfoMap;
+list<CLIENT_INFO> clientInformationsList;
+SOCKET acceptedSockets[MAX_CLIENTS];
 
 int  main(void)
 {
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
-	SOCKET acceptedSockets[MAX_CLIENTS];
+	
 	// variable used to store function return value
 	int iResult;
 	int socketsTaken = 0;
 	// Buffer used for storing incoming data
 	fd_set readfds;
 	unsigned long mode = 1; //non-blocking mode
+
+	InitializeCriticalSection(&QueueAccess);
+	InitializeCriticalSection(&FileMapAccess);
+	InitializeCriticalSection(&ClientListAccess);
 
 	if (InitializeWindowsSockets() == false)
 	{
@@ -150,16 +162,7 @@ int  main(void)
 
 			for (int i = 0; i < socketsTaken; i++)
 			{
-				if (FD_ISSET(acceptedSockets[i], &readfds))
-				{
-					const int semaphoreNum = 2;
-					HANDLE semaphores[semaphoreNum] = { FinishSignal, EmptyQueue };
-					while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
-					{
-						incomingRequestsQueue.push(acceptedSockets[i]);
-						ReleaseSemaphore(FullQueue, 1, NULL);
-					}
-				}
+				CheckSetSockets(&socketsTaken, acceptedSockets, &readfds);
 					
 			}
 
@@ -229,7 +232,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
 		
 		EnterCriticalSection(&QueueAccess);
-		SOCKET requestSocket = incomingRequestsQueue.front();  //Get request from queue
+		SOCKET* requestSocket = incomingRequestsQueue.front();  //Get request from queue
 		incomingRequestsQueue.pop();
 		LeaveCriticalSection(&QueueAccess);
 
@@ -240,13 +243,13 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int serverOwnedParts[FILE_PARTS];
 
 		//Receive request from socket
-		int result = RecvFileRequest(requestSocket, &fileRequest);
+		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
 			//The was an error and handle it
 		}
 
-		EnterCriticalSection(&FileMapAccess);
+		
 		size_t sizeFound = fileInfoMap.count(fileRequest.fileName);
 		LeaveCriticalSection(&FileMapAccess);
 
@@ -293,14 +296,14 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			fileInfoMap[fileRequest.fileName] = fileData;
 			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
 		}
-
-		SendFileResponse(requestSocket, fileResponse);
+		AddClientInfo(requestSocket, fileData);
+		SendFileResponse(*requestSocket, fileResponse);
 
 		for (int i = 0; i < fileResponse.serverPartsNumber; i++)
 		{
 			int partIndex = serverOwnedParts[i];
 			FILE_PART partToSend = fileParts[partIndex];
-			if (SendFilePart(requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
+			if (SendFilePart(*requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
 			{
 				//HANDLE SEND ERROR HERE
 			}
@@ -419,4 +422,89 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 
 	return 0;
 
+}
+
+
+int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds )
+{
+	for (int i = 0; i < *socketsTaken; i++)
+	{
+		if (FD_ISSET(acceptedSockets[i], readfds))
+		{
+			const int semaphoreNum = 2;
+			HANDLE semaphores[semaphoreNum] = { FinishSignal, EmptyQueue };
+			DWORD waitResult = WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE);
+			
+			if(waitResult == WAIT_OBJECT_0 + 1)
+			{
+				EnterCriticalSection(&FileMapAccess);
+				incomingRequestsQueue.push(acceptedSockets + i);
+				LeaveCriticalSection(&FileMapAccess);
+				ReleaseSemaphore(FullQueue, 1, NULL);
+			}
+			else
+			{
+				return -1;
+			}
+		}
+
+	}
+
+	return 0;
+}
+
+
+int AddClientInfo(SOCKET* socket, FILE_DATA data)
+{
+	EnterCriticalSection(&ClientListAccess);
+	list<CLIENT_INFO>::iterator it;
+	for (it = clientInformationsList.begin(); it != clientInformationsList.end(); ++it) {
+		if (it->clientSocket == socket) //Client's socket already exists here so we will just append new data
+		{
+			if (it->fileDataArraySize == it->ownedFilesCount)
+			{
+				it->clientOwnedFiles = (FILE_DATA*)realloc(it->clientOwnedFiles, it->fileDataArraySize  + FILE_PARTS);
+				it->fileDataArraySize *= 2;
+			}
+			it->clientOwnedFiles[it->ownedFilesCount] = data;
+			it->ownedFilesCount++;
+			LeaveCriticalSection(&ClientListAccess);
+			return 0;
+		}
+	}
+
+	CLIENT_INFO info;
+	info.clientOwnedFiles = (FILE_DATA*)malloc(FILE_PARTS * sizeof(FILE_DATA));
+	info.clientSocket = socket;
+	info.fileDataArraySize = FILE_PARTS;
+	info.ownedFilesCount = 1;
+
+	clientInformationsList.push_front(info);
+	LeaveCriticalSection(&ClientListAccess);
+	return 0;
+
+}
+
+
+int RemoveClient(SOCKET* clientSocket)
+{
+	EnterCriticalSection(&AcceptedSocketsAccess);
+	//Possibly deal with socket here
+	LeaveCriticalSection(&AcceptedSocketsAccess);
+
+	EnterCriticalSection(&ClientListAccess);
+	list<CLIENT_INFO>::iterator it;
+	for (it = clientInformationsList.begin(); it != clientInformationsList.end(); ++it) {
+		if (it->clientSocket == clientSocket)
+		{
+			free(it->clientOwnedFiles);
+			clientInformationsList.erase(it);
+
+			LeaveCriticalSection(&ClientListAccess);
+			return 0;
+		}
+	}
+
+	LeaveCriticalSection(&ClientListAccess);
+	return -1;
 }

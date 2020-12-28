@@ -23,7 +23,8 @@ typedef struct FILE_DATA
 
 typedef struct CLIENT_INFO
 {
-	SOCKET clientSocket;
+	SOCKET* clientSocket;
 	FILE_DATA* clientOwnedFiles;
+	unsigned int fileDataArraySize;
 	unsigned int ownedFilesCount;
 }C_INFO;
