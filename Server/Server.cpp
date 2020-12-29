@@ -13,6 +13,7 @@
 #include "../FileIO_Functions/FileIO.h"
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
+#define SERVER_THREADS 4
 
 using namespace std;
 bool InitializeWindowsSockets();
@@ -31,23 +32,23 @@ HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
 CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
 CRITICAL_SECTION ClientListAccess;			  // Critical section for clients list access
-CRITICAL_SECTION BrokenSocketsAccess;			  // Critical section for accepted sockets access
+CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
 
 //Data structures
 queue<SOCKET*> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
 unordered_map<string, FILE_DATA> fileInfoMap;
 list<CLIENT_INFO> clientInformationsList;
-list<SOCKET*> socketsToClose;
+SOCKET acceptedSockets[MAX_CLIENTS];
+int socketsTaken = 0;
 
 int  main(void)
 {
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
-	SOCKET acceptedSockets[MAX_CLIENTS];
+	
 	// variable used to store function return value
 	int iResult;
-	int socketsTaken = 0;
 	// Buffer used for storing incoming data
 	fd_set readfds;
 	unsigned long mode = 1; //non-blocking mode
@@ -55,7 +56,7 @@ int  main(void)
 	InitializeCriticalSection(&QueueAccess);
 	InitializeCriticalSection(&FileMapAccess);
 	InitializeCriticalSection(&ClientListAccess);
-	InitializeCriticalSection(&BrokenSocketsAccess);
+	InitializeCriticalSection(&AcceptedSocketsAccess);
 
 	if (InitializeWindowsSockets() == false)
 	{
@@ -137,15 +138,6 @@ int  main(void)
 		FD_ZERO(&readfds);
 		FD_SET(listenSocket, &readfds);
 
-		//close broken sockets first
-		list<SOCKET*>::iterator it;
-		EnterCriticalSection(&BrokenSocketsAccess);
-		for (it = socketsToClose.begin(); it != socketsToClose.end(); ++it)
-		{
-			ShutdownConnection(*it);
-		}
-		socketsToClose.clear();
-		LeaveCriticalSection(&BrokenSocketsAccess);
 
 		for (int i = 0; i < socketsTaken; i++)
 		{
@@ -163,20 +155,23 @@ int  main(void)
 		}
 		else if (result == SOCKET_ERROR) {
 
-			//TODO: Handle this error
+			//TODO: Handle this error, check which socket cause error and see if it is in sockets to close list
 
 			printf("Errorcina je %d ", WSAGetLastError());
 		}
 		else {
 			if (FD_ISSET(listenSocket, &readfds) && socketsTaken < MAX_CLIENTS)
 			{
-				AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket, &readfds);
+				EnterCriticalSection(&AcceptedSocketsAccess);
+				AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket);
+				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 
 			for (int i = 0; i < socketsTaken; i++)
 			{
+				EnterCriticalSection(&AcceptedSocketsAccess);
 				CheckSetSockets(&socketsTaken, acceptedSockets, &readfds);
-					
+				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 
 		}
@@ -239,9 +234,12 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
-			EnterCriticalSection(&BrokenSocketsAccess);
-			socketsToClose.push_front(requestSocket);
-			LeaveCriticalSection(&BrokenSocketsAccess);
+			RemoveClientInfo(requestSocket);
+			EnterCriticalSection(&AcceptedSocketsAccess);
+			ShutdownConnection(requestSocket);
+			RemoveSocketFromArray(acceptedSockets, &socketsTaken);
+			LeaveCriticalSection(&AcceptedSocketsAccess);
+			
 		}
 
 		
@@ -300,9 +298,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			FILE_PART partToSend = fileParts[partIndex];
 			if (SendFilePart(*requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
 			{
-				EnterCriticalSection(&BrokenSocketsAccess);
-				socketsToClose.push_front(requestSocket);
-				LeaveCriticalSection(&BrokenSocketsAccess);
+				RemoveClientInfo(requestSocket);
+				EnterCriticalSection(&AcceptedSocketsAccess);
+				ShutdownConnection(requestSocket);
+				RemoveSocketFromArray(acceptedSockets, &socketsTaken);
+				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 		}
 
@@ -321,7 +321,7 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 
 	if (unallocatedPartsArray == NULL)
 	{
-		//TODO: handle out of memory
+		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 		return -1;
 	}
 
@@ -363,7 +363,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	}
 	if (fileData.filePartDataArray == NULL)
 	{
-		//TODO Handle out of memory
+		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
@@ -490,6 +490,10 @@ int RemoveClientInfo(SOCKET* clientSocket)
 	for (it = clientInformationsList.begin(); it != clientInformationsList.end(); ++it) {
 		if (it->clientSocket == clientSocket)
 		{
+			for (int i = 0; i < it->ownedFilesCount; i++)
+			{
+				//TODO : ASSIGN USERS FILE PART BACK TO SERVER
+			}
 			free(it->clientOwnedFiles);
 			clientInformationsList.erase(it);
 
@@ -501,3 +505,5 @@ int RemoveClientInfo(SOCKET* clientSocket)
 	LeaveCriticalSection(&ClientListAccess);
 	return -1;
 }
+
+
