@@ -20,13 +20,17 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 		return -1;
 	}
 
+	int bytesSent = 0;
 	// #3. Send file part 
-	iResult = send(s, data, length, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
-	{
-		//HANDLE
-		return -1;
-	}
+	do {
+		iResult = send(s, data + bytesSent, length-bytesSent, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			//HANDLE
+			return -1;
+		}
+		bytesSent += iResult;
+	} while (bytesSent < length);
 
 	return 0;
 
@@ -62,12 +66,17 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 	}
 
 	// #3. Recv file part 
-	iResult = recv(s, data, *length, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	int bytesReceived = 0;
+	do
 	{
-		//HANDLE
-		return -1;
-	}
+		iResult = recv(s, data + bytesReceived, *length - bytesReceived, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			//HANDLE
+			return -1;
+		}
+		bytesReceived += iResult;
+	} while (bytesReceived < *length);
 
 	return 0;
 }

@@ -14,9 +14,12 @@
     <ClInclude Include="Server_Structs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ServerFuncs.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ServerStructs.cpp">
+    <ClCompile Include="ServerFuncs.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

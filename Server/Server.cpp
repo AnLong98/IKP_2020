@@ -9,6 +9,7 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../FTPServerFunctions/Server_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
+#include "../FTPServerFunctions/ServerFuncs.h"
 #include "../FileIO_Functions/FileIO.h"
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
@@ -16,12 +17,11 @@
 using namespace std;
 bool InitializeWindowsSockets();
 int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds);
-void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket, fd_set* readfds);
 int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray);
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
 int AddClientInfo(SOCKET* socket, FILE_DATA data);
-int RemoveClient(SOCKET* clientSocket);
+int RemoveClientInfo(SOCKET* clientSocket);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
 //Global variables
@@ -31,20 +31,20 @@ HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
 CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
 CRITICAL_SECTION ClientListAccess;			  // Critical section for clients list access
-CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
+CRITICAL_SECTION BrokenSocketsAccess;			  // Critical section for accepted sockets access
 
 //Data structures
 queue<SOCKET*> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
 unordered_map<string, FILE_DATA> fileInfoMap;
 list<CLIENT_INFO> clientInformationsList;
-SOCKET acceptedSockets[MAX_CLIENTS];
+list<SOCKET*> socketsToClose;
 
 int  main(void)
 {
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
-	
+	SOCKET acceptedSockets[MAX_CLIENTS];
 	// variable used to store function return value
 	int iResult;
 	int socketsTaken = 0;
@@ -55,6 +55,7 @@ int  main(void)
 	InitializeCriticalSection(&QueueAccess);
 	InitializeCriticalSection(&FileMapAccess);
 	InitializeCriticalSection(&ClientListAccess);
+	InitializeCriticalSection(&BrokenSocketsAccess);
 
 	if (InitializeWindowsSockets() == false)
 	{
@@ -62,6 +63,7 @@ int  main(void)
 		// by InitializeWindowsSockets() function
 		return 1;
 	}
+	
 
 	// Prepare address information structures
 	addrinfo *resultingAddress = NULL;
@@ -134,6 +136,17 @@ int  main(void)
 	{
 		FD_ZERO(&readfds);
 		FD_SET(listenSocket, &readfds);
+
+		//close broken sockets first
+		list<SOCKET*>::iterator it;
+		EnterCriticalSection(&BrokenSocketsAccess);
+		for (it = socketsToClose.begin(); it != socketsToClose.end(); ++it)
+		{
+			ShutdownConnection(*it);
+		}
+		socketsToClose.clear();
+		LeaveCriticalSection(&BrokenSocketsAccess);
+
 		for (int i = 0; i < socketsTaken; i++)
 		{
 			FD_SET(acceptedSockets[i], &readfds);
@@ -204,26 +217,6 @@ bool InitializeWindowsSockets()
 	return true;
 }
 
-void AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket, fd_set* readfds)
-{
-	acceptedSockets[*freeIndex] = accept(listenSocket, NULL, NULL);
-
-	if (acceptedSockets[*freeIndex] == INVALID_SOCKET)
-	{
-		printf("accept failed with error: %d\n", WSAGetLastError());
-		closesocket(listenSocket);
-		WSACleanup();
-		return;
-	}
-
-	unsigned long mode = 1; //non-blocking mode
-	int iResult = ioctlsocket(acceptedSockets[*freeIndex], FIONBIO, &mode);
-	if (iResult != NO_ERROR)
-		printf("ioctlsocket failed with error: %ld\n", iResult);
-	(*freeIndex)++;
-
-}
-
 
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 {
@@ -246,7 +239,9 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
-			//The was an error and handle it
+			EnterCriticalSection(&BrokenSocketsAccess);
+			socketsToClose.push_front(requestSocket);
+			LeaveCriticalSection(&BrokenSocketsAccess);
 		}
 
 		
@@ -305,7 +300,9 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			FILE_PART partToSend = fileParts[partIndex];
 			if (SendFilePart(*requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
 			{
-				//HANDLE SEND ERROR HERE
+				EnterCriticalSection(&BrokenSocketsAccess);
+				socketsToClose.push_front(requestSocket);
+				LeaveCriticalSection(&BrokenSocketsAccess);
 			}
 		}
 
@@ -486,12 +483,8 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data)
 }
 
 
-int RemoveClient(SOCKET* clientSocket)
+int RemoveClientInfo(SOCKET* clientSocket)
 {
-	EnterCriticalSection(&AcceptedSocketsAccess);
-	//Possibly deal with socket here
-	LeaveCriticalSection(&AcceptedSocketsAccess);
-
 	EnterCriticalSection(&ClientListAccess);
 	list<CLIENT_INFO>::iterator it;
 	for (it = clientInformationsList.begin(); it != clientInformationsList.end(); ++it) {
