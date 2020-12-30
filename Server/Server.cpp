@@ -1,3 +1,4 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #include <ws2tcpip.h>
 #include <winsock2.h>
 #include <stdlib.h>
@@ -181,16 +182,7 @@ int  main(void)
 
 	for (int i = 0; i < socketsTaken; i++)
 	{
-		// shutdown the connection since we're done
-		iResult = shutdown(acceptedSockets[i], SD_SEND);
-		if (iResult == SOCKET_ERROR)
-		{
-			printf("shutdown failed with error: %d\n", WSAGetLastError());
-			closesocket(acceptedSockets[i]);
-			WSACleanup();
-			return 1;
-		}
-		closesocket(acceptedSockets[i]);
+		ShutdownConnection(acceptedSockets + i);
 	}
 
 	// cleanup
@@ -237,7 +229,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			RemoveClientInfo(requestSocket);
 			EnterCriticalSection(&AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
-			RemoveSocketFromArray(acceptedSockets, &socketsTaken);
+			RemoveSocketFromArray(acceptedSockets,requestSocket, &socketsTaken );
 			LeaveCriticalSection(&AcceptedSocketsAccess);
 			
 		}
@@ -301,7 +293,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				RemoveClientInfo(requestSocket);
 				EnterCriticalSection(&AcceptedSocketsAccess);
 				ShutdownConnection(requestSocket);
-				RemoveSocketFromArray(acceptedSockets, &socketsTaken);
+				RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 		}
@@ -375,12 +367,59 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	fileData.filePartDataArray[fileData.partsOnClients].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number
 	fileData.partsOnClients++;																					//Increase number of parts owned by clients
 	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
+	memcpy(fileData.fileName, fileName, strlen(fileName));														//Copy file name
 
 	fileInfoMap[fileName] = fileData;																			//Save changes
 	LeaveCriticalSection(&FileMapAccess);
 
 	return partAssigned;
 }
+
+
+int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName)
+{
+	EnterCriticalSection(&FileMapAccess);
+	int clientPartIndex = -1;
+	FILE_DATA fileData = fileInfoMap[fileName];
+	//Find index of user assigned part
+	for (int i = 0; i < fileData.partsOnClients; i++)
+	{
+		if (fileData.filePartDataArray[i].isServerOnly)continue; //Skip server owned parts
+		unsigned short filePartPort = fileData.filePartDataArray[i].clientOwnerAddress.sin_port;
+		char *filePartIp = inet_ntoa(fileData.filePartDataArray[i].clientOwnerAddress.sin_addr);
+		if (filePartPort == clientInfo.sin_port && strcmp(filePartIp, inet_ntoa(clientInfo.sin_addr)) == 0)
+		{
+			clientPartIndex = i;
+			break;
+		}
+	}
+	int filePartToShift = clientPartIndex;
+	if (filePartToShift == -1)return -1;
+
+	
+	//Check if any other user has this file part and put his data here
+	for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
+	{
+		if (fileData.filePartDataArray[i].isServerOnly)continue;
+		if (fileData.filePartDataArray[i].filePartNumber == filePartToShift)
+		{
+			fileData.filePartDataArray[clientPartIndex].clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
+			clientPartIndex = i;
+			
+		}
+	}
+
+	//Shift remaining file parts back one place to fill the gap
+	for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
+	{
+		fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
+	}
+	fileData.partsOnClients--; //There is one less client owned part now.
+	fileInfoMap[fileName] = fileData;
+	LeaveCriticalSection(&FileMapAccess);
+	return 0;
+}
+
 
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts)
 {
@@ -453,6 +492,8 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 
 int AddClientInfo(SOCKET* socket, FILE_DATA data)
 {
+	//TODO ADD user's socket info 
+
 	EnterCriticalSection(&ClientListAccess);
 	list<CLIENT_INFO>::iterator it;
 	for (it = clientInformationsList.begin(); it != clientInformationsList.end(); ++it) {
@@ -475,7 +516,7 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data)
 	info.clientSocket = socket;
 	info.fileDataArraySize = FILE_PARTS;
 	info.ownedFilesCount = 1;
-
+	info.clientOwnedFiles[0] = data;
 	clientInformationsList.push_front(info);
 	LeaveCriticalSection(&ClientListAccess);
 	return 0;
@@ -492,11 +533,11 @@ int RemoveClientInfo(SOCKET* clientSocket)
 		{
 			for (int i = 0; i < it->ownedFilesCount; i++)
 			{
-				//TODO : ASSIGN USERS FILE PART BACK TO SERVER
+				UnassignFilePart(it->clientAddress, it->clientOwnedFiles[i].fileName);
+
 			}
 			free(it->clientOwnedFiles);
 			clientInformationsList.erase(it);
-
 			LeaveCriticalSection(&ClientListAccess);
 			return 0;
 		}

@@ -31,8 +31,20 @@ int AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET li
 	return 0;
 }
 
-int RemoveSocketFromArray(SOCKET acceptedSockets[], int *freeIndex)
+int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeIndex)
 {
-	//IMPLEMENT THIS
-	return 0;
+	for (int i = 0; i < *freeIndex; i++)
+	{
+		if (acceptedSockets + i == socket)
+		{
+			for (int j = i + 1; j < *freeIndex; j++)
+			{
+				acceptedSockets[j - 1] = acceptedSockets[j];
+			}
+			acceptedSockets[(*freeIndex) - 1] = INVALID_SOCKET;
+			(*freeIndex)--;
+			return 0;
+		}
+	}
+	return -1;
 }
