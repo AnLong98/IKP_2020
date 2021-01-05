@@ -133,7 +133,7 @@ int main()
 	SendFileRequest(connectSocket, file);
 
 
-	Sleep(3000);
+	getchar();
 
 	return 0;
 }

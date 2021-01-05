@@ -35,12 +35,14 @@ CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
 CRITICAL_SECTION ClientListAccess;			  // Critical section for clients list access
 CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
+CRITICAL_SECTION ProcessingSocketsAccess;			  // Critical section for processing sockets access
 
 //Data structures
 queue<SOCKET*> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
 unordered_map<string, FILE_DATA> fileInfoMap;
 list<CLIENT_INFO> clientInformationsList;
 SOCKET acceptedSockets[MAX_CLIENTS];
+int processingSockets[MAX_CLIENTS];
 int socketsTaken = 0;
 
 int  main(void)
@@ -77,6 +79,7 @@ int  main(void)
 		InitializeCriticalSection(&FileMapAccess);
 		InitializeCriticalSection(&ClientListAccess);
 		InitializeCriticalSection(&AcceptedSocketsAccess);
+		InitializeCriticalSection(&ProcessingSocketsAccess);
 
 		processor1 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor1ID);
 		processor2 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor2ID);
@@ -99,6 +102,7 @@ int  main(void)
 			DeleteCriticalSection(&FileMapAccess);
 			DeleteCriticalSection(&ClientListAccess);
 			DeleteCriticalSection(&AcceptedSocketsAccess);
+			DeleteCriticalSection(&ProcessingSocketsAccess);
 			return 0;
 		}
 	}
@@ -214,12 +218,11 @@ int  main(void)
 				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 
-			for (int i = 0; i < socketsTaken; i++)
-			{
-				EnterCriticalSection(&AcceptedSocketsAccess);
-				CheckSetSockets(&socketsTaken, acceptedSockets, &readfds);
-				LeaveCriticalSection(&AcceptedSocketsAccess);
-			}
+			
+			EnterCriticalSection(&AcceptedSocketsAccess);
+			CheckSetSockets(&socketsTaken, acceptedSockets, &readfds);
+			LeaveCriticalSection(&AcceptedSocketsAccess);
+			
 
 		}
 
@@ -256,7 +259,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	const int semaphoreNum = 2;
 	HANDLE semaphores[semaphoreNum] = { FinishSignal, FullQueue };
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
-		
+		printf("Received request");
 		EnterCriticalSection(&QueueAccess);
 		SOCKET* requestSocket = incomingRequestsQueue.front();  //Get request from queue
 		incomingRequestsQueue.pop();
@@ -276,13 +279,18 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			EnterCriticalSection(&AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets,requestSocket, &socketsTaken );
+			//ADD Removal of processing socket index. shift them back
 			LeaveCriticalSection(&AcceptedSocketsAccess);
 			
 		}
 
+		//Remove socket index from processing array
+		EnterCriticalSection(&ProcessingSocketsAccess);
+		processingSockets[requestSocket - acceptedSockets] = 0;
+		LeaveCriticalSection(&ProcessingSocketsAccess);
 		
 		size_t sizeFound = fileInfoMap.count(fileRequest.fileName);
-		LeaveCriticalSection(&FileMapAccess);
+		//LeaveCriticalSection(&FileMapAccess);
 
 		if ( sizeFound > 0)//File is loaded and can be given back to client
 		{
@@ -290,6 +298,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			fileData = fileInfoMap.find(fileRequest.fileName)->second;
 			LeaveCriticalSection(&FileMapAccess);
 			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts);
+			AddClientInfo(requestSocket, fileData);
 			
 		}
 		else // We need to load the file first
@@ -321,14 +330,23 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileData.filePartDataArray = fileParts;
 				fileData.partArraySize = 2 * FILE_PARTS;
 				fileData.partsOnClients = 0;
+
+				//Add new file data structure to map, no need for CS because no one owns this structure yet
+				fileInfoMap[fileRequest.fileName] = fileData;
+				AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
+				AddClientInfo(requestSocket, fileData);
 			}
 
-			//Add new file data structure to map, no need for CS because no one owns this structure yet
-			fileInfoMap[fileRequest.fileName] = fileData;
-			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
 		}
-		AddClientInfo(requestSocket, fileData);
-		SendFileResponse(*requestSocket, fileResponse);
+
+		if (SendFileResponse(*requestSocket, fileResponse) != 0)
+		{
+			RemoveClientInfo(requestSocket);
+			EnterCriticalSection(&AcceptedSocketsAccess);
+			ShutdownConnection(requestSocket);
+			RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
+			LeaveCriticalSection(&AcceptedSocketsAccess);
+		}
 
 		for (int i = 0; i < fileResponse.serverPartsNumber; i++)
 		{
@@ -511,6 +529,14 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 {
 	for (int i = 0; i < *socketsTaken; i++)
 	{
+		EnterCriticalSection(&ProcessingSocketsAccess);
+		if (processingSockets[i] == 1)
+		{
+			LeaveCriticalSection(&ProcessingSocketsAccess);
+			continue;  //check if socket is already under processing
+		}
+		LeaveCriticalSection(&ProcessingSocketsAccess);
+
 		if (FD_ISSET(acceptedSockets[i], readfds))
 		{
 			const int semaphoreNum = 2;
@@ -520,9 +546,15 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 			if(waitResult == WAIT_OBJECT_0 + 1)
 			{
 				EnterCriticalSection(&FileMapAccess);
+				printf("\nSoket %d primio", i);
 				incomingRequestsQueue.push(acceptedSockets + i);
 				LeaveCriticalSection(&FileMapAccess);
 				ReleaseSemaphore(FullQueue, 1, NULL);
+				//Add socket index to processing list to avoid double reading
+				EnterCriticalSection(&ProcessingSocketsAccess);
+				processingSockets[i] = 1;
+				LeaveCriticalSection(&ProcessingSocketsAccess);
+					
 			}
 			else
 			{
