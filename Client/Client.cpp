@@ -130,7 +130,7 @@ int main()
 	printf("\n%s", file.fileName);
 
 	//imam gresku sa linkerom ovde.
-	//SendFileRequest(connectSocket, file);
+	SendFileRequest(connectSocket, file);
 
 
 	Sleep(3000);

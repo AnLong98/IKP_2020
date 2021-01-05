@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FTPServerFunctions", "FTPSe
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FileIO_Functions", "FileIO_Functions\FileIO_Functions.vcxproj", "{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Client", "Client\Client.vcxproj", "{8E29D26D-17C4-4458-9252-186093AC4371}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -51,6 +53,14 @@ Global
 		{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}.Release|x64.Build.0 = Release|x64
 		{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}.Release|x86.ActiveCfg = Release|Win32
 		{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}.Release|x86.Build.0 = Release|Win32
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Debug|x64.ActiveCfg = Debug|x64
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Debug|x64.Build.0 = Debug|x64
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Debug|x86.ActiveCfg = Debug|Win32
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Debug|x86.Build.0 = Debug|Win32
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Release|x64.ActiveCfg = Release|x64
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Release|x64.Build.0 = Release|x64
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Release|x86.ActiveCfg = Release|Win32
+		{8E29D26D-17C4-4458-9252-186093AC4371}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
