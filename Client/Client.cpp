@@ -17,32 +17,62 @@
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
+#define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
-int port = 50000;
+
+typedef struct CLIENT_FILE_PART
+{
+	unsigned int filePartNumber;
+	unsigned int partSize;
+	char* partStartPointer;
+}C_F_PART;
+
+
+HANDLE finishSignal;
+
+CRITICAL_SECTION UserInput;
+CRITICAL_SECTION FileAccess;
+
 bool InitializeWindowsSockets();
+DWORD WINAPI ProcessIncomingFileParts(LPVOID param);
+SOCKET listenSocket;
 
 int main()
 {
-	SOCKET connectSocket = INVALID_SOCKET;
-	SOCKET listenSocket = INVALID_SOCKET;
-
-	srand(time(0));
-
-	//random port
-	int port = (rand() % (50000 - 20000 + 1)) + 20000;
-	char portBuff[5];
-	_itoa(port, portBuff, 10);
+	//SOCKET connectSocket = INVALID_SOCKET;
+	listenSocket = INVALID_SOCKET;
+	if (InitializeWindowsSockets() == false)
+	{
+		return 1;
+	}
 
 	int iResult;
 
 	fd_set readfds;
 	unsigned long mode = 1; 
 
-	if (InitializeWindowsSockets() == false)
-	{
-		return 1;
-	}
+	// napraviti jednu nit i funkciju koja ce da radi sa serverom.
+	HANDLE process1 = NULL;
+	DWORD dwWaitResult;
+	DWORD Process1ID;
 
+	InitializeCriticalSection(&FileAccess);
+	InitializeCriticalSection(&UserInput);
+
+
+	/*if (!process1)
+	{
+		SAFE_DELETE_HANDLE(process1);
+
+		DeleteCriticalSection(&FileAccess);
+
+		return 0;
+	}*/
+
+	
+	
+/*
+	// OVAJ CONNECT PREBACITI DA RADI U ZASEBNOJ NITI.
 	connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (connectSocket == INVALID_SOCKET)
@@ -64,7 +94,7 @@ int main()
 		WSACleanup();
 		return 1;
 	}
-	
+	*/
 
 	//LISTEN SOCKET ZA KLIJENTE
 	addrinfo *resultingAddress = NULL;
@@ -77,7 +107,7 @@ int main()
 	hints.ai_flags = AI_PASSIVE;
 
 
-	iResult = getaddrinfo(NULL, portBuff, &hints, &resultingAddress);
+	iResult = getaddrinfo(NULL, "0", &hints, &resultingAddress);
 	if (iResult != 0)
 	{
 		printf("getaddrinfo failed with error: %d\n", iResult);
@@ -105,33 +135,28 @@ int main()
 		return 1;
 	}
 
-	//IZVLACIM SOCKADDR_IN ZA FILE_REQUEST
-	struct sockaddr_in socketAddress;
-	int socketAddress_len = sizeof(socketAddress);
-
-	if (getsockname(listenSocket, (sockaddr *)&socketAddress, &socketAddress_len) == -1)
-	{
-		printf("getsockname() failed.\n"); return -1;
-	}
-
-	printf("\nPort: %d", (int)(socketAddress.sin_port));
-	printf("\nIP: %s", inet_ntoa(socketAddress.sin_addr));
-
+	process1 = CreateThread(NULL, 0, &ProcessIncomingFileParts, (LPVOID)0, 0, &Process1ID);
 
 	printf("Client is up.");
 
-	FILE_REQUEST file;
-	char filename[MAX_FILE_NAME];
+	//CEKAM DA SE MOJA NIT ZAVRSI
+	dwWaitResult = WaitForSingleObject(
+		process1,
+		INFINITE);
 
-	printf("\nEnter a file name: ");
-	gets_s(file.fileName, MAX_FILE_NAME);
-	file.requesterListenAddress = socketAddress;
+	switch (dwWaitResult)
+	{
+		// All thread objects were signaled
+	case WAIT_OBJECT_0:
+		printf("\nThread ended, cleaning up for application exit...\n");
+		break;
 
-	printf("\n%s", file.fileName);
-
-	//imam gresku sa linkerom ovde.
-	SendFileRequest(connectSocket, file);
-
+		// An error occurred
+	default:
+		printf("WaitForSingleObject failed (%d)\n", GetLastError());
+		return 1;
+	}
+	
 
 	getchar();
 
@@ -148,4 +173,75 @@ bool InitializeWindowsSockets()
 		return false;
 	}
 	return true;
+}
+
+DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
+{
+	printf("\nNew thread started.");
+	SOCKET connectSocket = INVALID_SOCKET;
+
+	// OVAJ CONNECT PREBACITI DA RADI U ZASEBNOJ NITI.
+	connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+	if (connectSocket == INVALID_SOCKET)
+	{
+		printf("socket failed with error: %ld", WSAGetLastError());
+		WSACleanup();
+		return 1;
+	}
+
+	sockaddr_in serverAddress;
+	serverAddress.sin_family = AF_INET;
+	InetPton(AF_INET, TEXT(SERVER_ADDRESS), &serverAddress.sin_addr.s_addr);
+	serverAddress.sin_port = htons(DEFAULT_PORT);
+
+	if (connect(connectSocket, (SOCKADDR*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR)
+	{
+		printf("Unable to connect to server.\n");
+		closesocket(connectSocket);
+		WSACleanup();
+		return 1;
+	}
+
+	struct sockaddr_in socketAddress;
+	int socketAddress_len = sizeof(socketAddress);
+
+	if (getsockname(listenSocket, (sockaddr *)&socketAddress, &socketAddress_len) == -1)
+	{
+		printf("getsockname() failed.\n"); return -1;
+	}
+
+	FILE_REQUEST file;
+	char filename[MAX_FILE_NAME];
+
+	EnterCriticalSection(&UserInput);
+	printf("\nEnter a file name: ");
+	gets_s(file.fileName, MAX_FILE_NAME);
+	LeaveCriticalSection(&UserInput);
+
+	file.requesterListenAddress = socketAddress;
+
+	printf("\n%s", file.fileName);
+
+	SendFileRequest(connectSocket, file);
+
+
+	printf("\nFiles sent to server. Waiting for response...");
+
+	FILE_RESPONSE response;
+
+	RecvFileResponse(connectSocket, &response);
+
+	printf("\nResponse recieved from server. Waiting for parts from server...");
+
+	char* data = NULL;
+	unsigned int length;
+	int partNumber;
+
+	for (int i = 0; i < (int)response.serverPartsNumber; i++)
+	{
+		RecvFilePart(connectSocket, &data, &length, &partNumber);
+		printf("\nData: %s\nLength:%d\nPartNumber: %d", *data, length, partNumber);
+	}
+
 }
