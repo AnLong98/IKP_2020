@@ -114,7 +114,7 @@ int main()
 		printf("getsockname() failed.\n"); return -1;
 	}
 
-	printf("\nPort: %d", (int)ntohs(socketAddress.sin_port));
+	printf("\nPort: %d", (int)(socketAddress.sin_port));
 	printf("\nIP: %s", inet_ntoa(socketAddress.sin_addr));
 
 

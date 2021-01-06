@@ -8,7 +8,7 @@
 
 	Returns 0 if reading is successful, otherwise returns -1
 */
-int ReadFileIntoMemory(char* fileName, char* unallocatedBufferPointer, size_t* size);
+int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* size);
 
 /*
 	Writes file onto disk. Free's allocated memory buffer.
