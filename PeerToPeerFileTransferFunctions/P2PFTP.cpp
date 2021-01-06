@@ -39,7 +39,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 
 }
 
-int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
+int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 {
 	char buffer[BUFFER];
 	// #1. Recv file part number
@@ -61,8 +61,8 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 	*length = ntohl(atoi(buffer));
 
 	//Allocate memory for filePart
-	data = (char*)malloc(*length);
-	if (data == NULL)
+	*data = (char*)malloc(*length);
+	if (*data == NULL)
 	{
 		//HANDLE OUT OF MEMORY
 		return -1;
@@ -72,7 +72,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 	int bytesReceived = 0;
 	do
 	{
-		iResult = recv(s, data + bytesReceived, *length - bytesReceived, 0);
+		iResult = recv(s, *data + bytesReceived, *length - bytesReceived, 0);
 		if (iResult == SOCKET_ERROR || iResult == 0)
 		{
 			//HANDLE
