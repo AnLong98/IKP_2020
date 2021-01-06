@@ -4,8 +4,10 @@
 
 int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 {
+	char buffer[BUFFER];
+	_itoa_s(ntohl(partNumber), buffer, 10);
 	// #1. Send file part number
-	int iResult = send(s, (char*)htonl(partNumber), sizeof(int), 0);
+	int iResult = send(s, buffer, BUFFER, 0);
 	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
@@ -13,7 +15,8 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 	}
 
 	// #2. Send file part size
-	iResult = send(s, (char*)htonl(length), sizeof(unsigned int), 0);
+	_itoa_s(ntohl(length), buffer, 10);
+	iResult = send(s, buffer, BUFFER, 0);
 	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
@@ -40,7 +43,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 {
 	char buffer[BUFFER];
 	// #1. Recv file part number
-	int iResult = recv(s, buffer, sizeof(int), 0);
+	int iResult = recv(s, buffer, BUFFER, 0);
 	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE
@@ -49,7 +52,7 @@ int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber)
 	*partNumber = ntohl(atoi(buffer));
 
 	// #2. Recv file part size
-	iResult = recv(s, buffer, sizeof(unsigned int), 0);
+	iResult = recv(s, buffer, BUFFER, 0);
 	if (iResult == SOCKET_ERROR || iResult == 0)
 	{
 		//HANDLE

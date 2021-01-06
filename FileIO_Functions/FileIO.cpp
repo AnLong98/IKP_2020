@@ -2,9 +2,14 @@
 #include "../FileIO_Functions/FileIO.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <direct.h>
 
-int ReadFileIntoMemory(char* fileName, char* unallocatedBufferPointer, size_t* size)
+int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* size)
 {
+	char path[80];
+	_getcwd(path, 80);
+	printf("Current Directory = %s", path);
+
 	FILE* pFile;
 	pFile = fopen(fileName, "rb");
 
@@ -17,13 +22,13 @@ int ReadFileIntoMemory(char* fileName, char* unallocatedBufferPointer, size_t* s
 	*size = ftell(pFile);
 	fseek(pFile, 0L, SEEK_SET);
 
-	unallocatedBufferPointer = (char*)malloc((*size) * sizeof(char));
-	size_t readBytes = fread(unallocatedBufferPointer, (*size), 1, pFile);
+	*unallocatedBufferPointer = (char*)malloc((*size) * sizeof(char));
+	size_t readBytes = fread(*unallocatedBufferPointer, 1 ,(*size) , pFile);
 
 	fclose(pFile);
 	if (readBytes != *size)
 	{
-		free(unallocatedBufferPointer);
+		free(*unallocatedBufferPointer);
 		return -1;
 	}
 

@@ -20,7 +20,7 @@
 using namespace std;
 bool InitializeWindowsSockets();
 int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds);
-int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray);
+int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART** unallocatedPartsArray);
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
 int AddClientInfo(SOCKET* socket, FILE_DATA data);
@@ -215,6 +215,7 @@ int  main(void)
 			{
 				EnterCriticalSection(&AcceptedSocketsAccess);
 				AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket);
+				printf("Primio konekciju na %d", socketsTaken - 1);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 
@@ -270,17 +271,29 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		FILE_REQUEST fileRequest;
 		FILE_RESPONSE fileResponse;
 		int serverOwnedParts[FILE_PARTS];
+		int isAssignedWithPart = 0;
 
 		//Receive request from socket
 		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
+			int processingSocketIndex = requestSocket - acceptedSockets;
+			printf("\nDiskonektovao se %d", processingSocketIndex);
 			RemoveClientInfo(requestSocket);
 			EnterCriticalSection(&AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets,requestSocket, &socketsTaken );
-			//ADD Removal of processing socket index. shift them back
+			
+			EnterCriticalSection(&ProcessingSocketsAccess);
+			for (int i = processingSocketIndex; i < MAX_CLIENTS - 1; i++)
+			{
+				processingSockets[i] = processingSockets[i + 1];
+			}
+			processingSockets[MAX_CLIENTS - 1] = 0;
+			LeaveCriticalSection(&ProcessingSocketsAccess);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue;
 			
 		}
 
@@ -298,14 +311,14 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			fileData = fileInfoMap.find(fileRequest.fileName)->second;
 			LeaveCriticalSection(&FileMapAccess);
 			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts);
-			AddClientInfo(requestSocket, fileData);
+			isAssignedWithPart = 1;
 			
 		}
 		else // We need to load the file first
 		{
 			char* fileBuffer = NULL;
 			size_t fileSize;
-			int result = ReadFileIntoMemory(fileRequest.fileName, fileBuffer, &fileSize);
+			int result = ReadFileIntoMemory(fileRequest.fileName, &fileBuffer, &fileSize);
 
 			if (result != 0)//File probably doesn't exist on server
 			{
@@ -313,10 +326,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileResponse.clientPartsNumber = 0;
 				fileResponse.filePartToStore = 0;
 				fileResponse.serverPartsNumber = 0;
+				isAssignedWithPart = -1;
 			}
 			else //File is on server and loaded into buffer
 			{
-				DivideFileIntoParts(fileBuffer, fileSize, FILE_PARTS, fileParts);
+				DivideFileIntoParts(fileBuffer, fileSize, FILE_PARTS, &fileParts);
 				fileResponse.fileExists = 1;
 				fileResponse.clientPartsNumber = 0;
 				fileResponse.filePartToStore = 0;
@@ -329,12 +343,12 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileData.filePointer = fileBuffer;
 				fileData.filePartDataArray = fileParts;
 				fileData.partArraySize = 2 * FILE_PARTS;
+				fileData.nextPartToAssign = 0;
+				memcpy(fileData.fileName, fileRequest.fileName, MAX_FILE_NAME);
 				fileData.partsOnClients = 0;
 
 				//Add new file data structure to map, no need for CS because no one owns this structure yet
 				fileInfoMap[fileRequest.fileName] = fileData;
-				AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
-				AddClientInfo(requestSocket, fileData);
 			}
 
 		}
@@ -346,8 +360,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue;
 		}
 
+		int sockERR = 0;
 		for (int i = 0; i < fileResponse.serverPartsNumber; i++)
 		{
 			int partIndex = serverOwnedParts[i];
@@ -359,23 +376,32 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				ShutdownConnection(requestSocket);
 				RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
+				sockERR = 1;
+				ReleaseSemaphore(&EmptyQueue, 1, NULL);
+				break;
 			}
 		}
-
+		if (sockERR == 1) {
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue; //Skip processing as socket was compromised
+		}
+		if (isAssignedWithPart == 0)
+			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
+		AddClientInfo(requestSocket, fileData);
 		ReleaseSemaphore(&EmptyQueue, 1, NULL);
 	}
 	return 0;
 }
 
 
-int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART* unallocatedPartsArray)
+int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART** unallocatedPartsArray)
 {
 	size_t partSize = fileSize / parts;
 	size_t totalSizeAccounted = 0;
 
-	unallocatedPartsArray = (FILE_PART*)malloc(sizeof(FILE_PART) * parts * 2); //Allocate double the size
+	*unallocatedPartsArray = (FILE_PART*)malloc(sizeof(FILE_PART) * parts * 2); //Allocate double the size
 
-	if (unallocatedPartsArray == NULL)
+	if (*unallocatedPartsArray == NULL)
 	{
 		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 		return -1;
@@ -385,22 +411,22 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 	{
 		if (i == parts - 1)
 		{
-			unallocatedPartsArray[i].partSize = fileSize - totalSizeAccounted;
+			(*unallocatedPartsArray)[i].partSize = fileSize - totalSizeAccounted;
 		}
 		else
 		{
-			unallocatedPartsArray[i].partSize = partSize;
+			(*unallocatedPartsArray)[i].partSize = partSize;
 		}
-		unallocatedPartsArray[i].filePartNumber = 0;
-		unallocatedPartsArray[i].isServerOnly = 1; //Assign part to server first
-		unallocatedPartsArray[i].partSize = partSize;
-		unallocatedPartsArray[i].partStartPointer = loadedFileBuffer + i * partSize;
+		(*unallocatedPartsArray)[i].filePartNumber = 0;
+		(*unallocatedPartsArray)[i].isServerOnly = 1; //Assign part to server first
+		(*unallocatedPartsArray)[i].partSize = partSize;
+		(*unallocatedPartsArray)[i].partStartPointer = loadedFileBuffer + i * partSize;
 		totalSizeAccounted += partSize;
 	}
 
 	for (int i = parts; i < 2 * parts; i++)
 	{
-		unallocatedPartsArray[i].isServerOnly = 1;
+		(*unallocatedPartsArray)[i].isServerOnly = 1;
 	}
 
 	return 0;
@@ -412,7 +438,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 
 	EnterCriticalSection(&FileMapAccess);
 	FILE_DATA fileData = fileInfoMap[fileName];
-	if (fileData.partArraySize == fileData.partArraySize)//Parts array is full and should be increased
+	if (fileData.partArraySize == fileData.partsOnClients)//Parts array is full and should be increased
 	{
 		fileData.filePartDataArray = (FILE_PART*)realloc(fileData.filePartDataArray, fileData.partArraySize + FILE_PARTS); //Increase array by the count of file parts
 		fileData.partArraySize += FILE_PARTS;
@@ -420,6 +446,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	if (fileData.filePartDataArray == NULL)
 	{
 		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+		LeaveCriticalSection(&FileMapAccess);
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
@@ -458,7 +485,11 @@ int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName)
 		}
 	}
 	int filePartToShift = clientPartIndex;
-	if (filePartToShift == -1)return -1;
+	if (filePartToShift == -1)
+	{
+		LeaveCriticalSection(&FileMapAccess);
+		return -1;
+	}
 
 	
 	//Check if any other user has this file part and put his data here
@@ -545,10 +576,10 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 			
 			if(waitResult == WAIT_OBJECT_0 + 1)
 			{
-				EnterCriticalSection(&FileMapAccess);
+				EnterCriticalSection(&QueueAccess);
 				printf("\nSoket %d primio", i);
 				incomingRequestsQueue.push(acceptedSockets + i);
-				LeaveCriticalSection(&FileMapAccess);
+				LeaveCriticalSection(&QueueAccess);
 				ReleaseSemaphore(FullQueue, 1, NULL);
 				//Add socket index to processing list to avoid double reading
 				EnterCriticalSection(&ProcessingSocketsAccess);
