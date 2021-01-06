@@ -3,7 +3,7 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 
 int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber);
-int RecvFilePart(SOCKET s, char* data, unsigned int* length, int* partNumber);
+int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber);
 
 
 int SendFilePartRequest(SOCKET s, FILE_PART_REQUEST request);
