@@ -233,6 +233,8 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 	RecvFileResponse(connectSocket, &response);
 
 	printf("\nResponse recieved from server. Waiting for parts from server...");
+	for (int i = 0; i < response.clientPartsNumber; i++)
+		printf("\nClientPort: %d\t\tClientPart: %d", response.clientParts[i].clientOwnerAddress.sin_port, response.clientParts[i].partNumber);
 
 	char* data = NULL;
 	unsigned int length;
@@ -241,7 +243,7 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 	for (int i = 0; i < (int)response.serverPartsNumber; i++)
 	{
 		RecvFilePart(connectSocket, &data, &length, &partNumber);
-		printf("\nData: %s\nLength:%d\nPartNumber: %d", *data, length, partNumber);
+		printf("\nData: %s\nLength:%d\nPartNumber: %d", data, length, partNumber);
 	}
 
 }

@@ -24,7 +24,7 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART** unallocatedPartsArray);
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
-int AddClientInfo(SOCKET* socket, FILE_DATA data);
+int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientInfo);
 int RemoveClientInfo(SOCKET* clientSocket);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
@@ -48,6 +48,10 @@ int socketsTaken = 0;
 
 int  main(void)
 {
+	SYSTEM_INFO sysinfo;
+	GetSystemInfo(&sysinfo);
+	const int numCPU = sysinfo.dwNumberOfProcessors;
+
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
@@ -391,7 +395,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		}
 		if (isAssignedWithPart == 0)
 			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
-		AddClientInfo(requestSocket, fileData);
+		AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress);
 		ReleaseSemaphore(EmptyQueue, 1, NULL);
 		printf("\nReleased empty queue");
 	}
@@ -537,7 +541,7 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 		{
 			FILE_PART_INFO partInfo;
 			partInfo.partNumber = fileData.filePartDataArray[i].filePartNumber;
-			partInfo.clientOwnerAddress = request.requesterListenAddress;
+			partInfo.clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
 			response->clientParts[clientOwnedPartsCount++] = partInfo;
 		}	
 
@@ -608,7 +612,7 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 }
 
 
-int AddClientInfo(SOCKET* socket, FILE_DATA data)
+int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress)
 {
 	//TODO ADD user's socket info 
 
@@ -631,6 +635,7 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data)
 
 	CLIENT_INFO info;
 	info.clientOwnedFiles = (FILE_DATA*)malloc(FILE_PARTS * sizeof(FILE_DATA));
+	info.clientAddress = clientAddress;
 	info.clientSocket = socket;
 	info.fileDataArraySize = FILE_PARTS;
 	info.ownedFilesCount = 1;
