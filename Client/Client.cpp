@@ -240,8 +240,8 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 
 	for (int i = 0; i < (int)response.serverPartsNumber; i++)
 	{
-		RecvFilePart(connectSocket, data, &length, &partNumber);
-		printf("\nData: %s\nLength:%d\nPartNumber: %d", data, length, partNumber);
+		RecvFilePart(connectSocket, &data, &length, &partNumber);
+		printf("\nData: %s\nLength:%d\nPartNumber: %d", *data, length, partNumber);
 	}
 
 }
