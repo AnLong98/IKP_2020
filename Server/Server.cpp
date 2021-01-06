@@ -494,14 +494,15 @@ int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName)
 			break;
 		}
 	}
-	int filePartToShift = clientPartIndex;
-	if (filePartToShift == -1)
+	int filePartToShift = fileData.filePartDataArray[clientPartIndex].filePartNumber;
+	if (clientPartIndex == -1)
 	{
 		LeaveCriticalSection(&FileMapAccess);
 		return -1;
 	}
 
 	
+	int isShifted = 0;
 	//Check if any other user has this file part and put his data here
 	for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
 	{
@@ -510,15 +511,26 @@ int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName)
 		{
 			fileData.filePartDataArray[clientPartIndex].clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
 			clientPartIndex = i;
-			
+			isShifted = 1;
+
 		}
 	}
 
-	//Shift remaining file parts back one place to fill the gap
-	for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
+	if (!isShifted)
 	{
-		fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
+		fileData.filePartDataArray[filePartToShift].isServerOnly = 1;
 	}
+	
+	//Shift back only if client's part is not among first 10 parts
+	if (clientPartIndex >= FILE_PARTS)
+	{
+		//Shift remaining file parts back one place to fill the gap
+		for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
+		{
+			fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
+		}
+	}
+
 	fileData.partsOnClients--; //There is one less client owned part now.
 	fileInfoMap[fileName] = fileData;
 	LeaveCriticalSection(&FileMapAccess);
