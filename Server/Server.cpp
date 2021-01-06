@@ -90,6 +90,7 @@ int  main(void)
 		if (!processor1 || !processor2 || !processor3 || !processor4) {
 
 			ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+			printf("\nReleased finish");
 			
 			SAFE_DELETE_HANDLE(processor1);
 			SAFE_DELETE_HANDLE(processor2);
@@ -261,7 +262,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	const int semaphoreNum = 2;
 	HANDLE semaphores[semaphoreNum] = { FinishSignal, FullQueue };
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
-		printf("Received request");
+		printf("Taken full queue");
 		EnterCriticalSection(&QueueAccess);
 		SOCKET* requestSocket = incomingRequestsQueue.front();  //Get request from queue
 		incomingRequestsQueue.pop();
@@ -293,7 +294,8 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			processingSockets[MAX_CLIENTS - 1] = 0;
 			LeaveCriticalSection(&ProcessingSocketsAccess);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
-			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			ReleaseSemaphore(EmptyQueue, 1, NULL);
+			printf("\nReleased empty queue");
 			continue;
 			
 		}
@@ -362,7 +364,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
-			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			ReleaseSemaphore(EmptyQueue, 1, NULL);
 			continue;
 		}
 
@@ -379,18 +381,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
 				sockERR = 1;
-				ReleaseSemaphore(&EmptyQueue, 1, NULL);
 				break;
 			}
 		}
 		if (sockERR == 1) {
-			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			ReleaseSemaphore(EmptyQueue, 1, NULL);
+			printf("\nReleased empty queue");
 			continue; //Skip processing as socket was compromised
 		}
 		if (isAssignedWithPart == 0)
 			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
 		AddClientInfo(requestSocket, fileData);
-		ReleaseSemaphore(&EmptyQueue, 1, NULL);
+		ReleaseSemaphore(EmptyQueue, 1, NULL);
+		printf("\nReleased empty queue");
 	}
 	return 0;
 }
@@ -406,9 +409,10 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 	if (*unallocatedPartsArray == NULL)
 	{
 		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+		printf("\nReleased finish");
 		return -1;
 	}
-
+	int partNumber = 0;
 	for (int i = 0; i < parts; i++)
 	{
 		if (i == parts - 1)
@@ -419,9 +423,8 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 		{
 			(*unallocatedPartsArray)[i].partSize = partSize;
 		}
-		(*unallocatedPartsArray)[i].filePartNumber = 0;
+		(*unallocatedPartsArray)[i].filePartNumber = partNumber++;
 		(*unallocatedPartsArray)[i].isServerOnly = 1; //Assign part to server first
-		(*unallocatedPartsArray)[i].partSize = partSize;
 		(*unallocatedPartsArray)[i].partStartPointer = loadedFileBuffer + i * partSize;
 		totalSizeAccounted += partSize;
 	}
@@ -447,8 +450,9 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	}
 	if (fileData.filePartDataArray == NULL)
 	{
-		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 		LeaveCriticalSection(&FileMapAccess);
+		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+		printf("\nReleased finish");
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
@@ -574,15 +578,18 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 		{
 			const int semaphoreNum = 2;
 			HANDLE semaphores[semaphoreNum] = { FinishSignal, EmptyQueue };
+			//Ovde se zakuca ako iskljucim par klijenata
 			DWORD waitResult = WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE);
 			
 			if(waitResult == WAIT_OBJECT_0 + 1)
 			{
+				printf("\nTaken Empty queue");
 				EnterCriticalSection(&QueueAccess);
 				printf("\nSoket %d primio", i);
 				incomingRequestsQueue.push(acceptedSockets + i);
 				LeaveCriticalSection(&QueueAccess);
 				ReleaseSemaphore(FullQueue, 1, NULL);
+				printf("\nReleased full queue");
 				//Add socket index to processing list to avoid double reading
 				EnterCriticalSection(&ProcessingSocketsAccess);
 				processingSockets[i] = 1;
