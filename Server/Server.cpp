@@ -311,6 +311,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			fileData = fileInfoMap.find(fileRequest.fileName)->second;
 			LeaveCriticalSection(&FileMapAccess);
 			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts);
+			fileParts = fileData.filePartDataArray;
 			isAssignedWithPart = 1;
 			
 		}
