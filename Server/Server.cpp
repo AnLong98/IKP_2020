@@ -215,6 +215,7 @@ int  main(void)
 			{
 				EnterCriticalSection(&AcceptedSocketsAccess);
 				AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket);
+				printf("Primio konekciju na %d", socketsTaken - 1);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
 			}
 
@@ -276,12 +277,23 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
+			int processingSocketIndex = requestSocket - acceptedSockets;
+			printf("\nDiskonektovao se %d", processingSocketIndex);
 			RemoveClientInfo(requestSocket);
 			EnterCriticalSection(&AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets,requestSocket, &socketsTaken );
-			//ADD Removal of processing socket index. shift them back
+			
+			EnterCriticalSection(&ProcessingSocketsAccess);
+			for (int i = processingSocketIndex; i < MAX_CLIENTS - 1; i++)
+			{
+				processingSockets[i] = processingSockets[i + 1];
+			}
+			processingSockets[MAX_CLIENTS - 1] = 0;
+			LeaveCriticalSection(&ProcessingSocketsAccess);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue;
 			
 		}
 
@@ -348,8 +360,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue;
 		}
 
+		int sockERR = 0;
 		for (int i = 0; i < fileResponse.serverPartsNumber; i++)
 		{
 			int partIndex = serverOwnedParts[i];
@@ -361,9 +376,16 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				ShutdownConnection(requestSocket);
 				RemoveSocketFromArray(acceptedSockets, requestSocket, &socketsTaken);
 				LeaveCriticalSection(&AcceptedSocketsAccess);
+				sockERR = 1;
+				ReleaseSemaphore(&EmptyQueue, 1, NULL);
+				break;
 			}
 		}
-		if(isAssignedWithPart == 0)
+		if (sockERR == 1) {
+			ReleaseSemaphore(&EmptyQueue, 1, NULL);
+			continue; //Skip processing as socket was compromised
+		}
+		if (isAssignedWithPart == 0)
 			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
 		AddClientInfo(requestSocket, fileData);
 		ReleaseSemaphore(&EmptyQueue, 1, NULL);
@@ -424,6 +446,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName)
 	if (fileData.filePartDataArray == NULL)
 	{
 		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+		LeaveCriticalSection(&FileMapAccess);
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
@@ -462,7 +485,11 @@ int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName)
 		}
 	}
 	int filePartToShift = clientPartIndex;
-	if (filePartToShift == -1)return -1;
+	if (filePartToShift == -1)
+	{
+		LeaveCriticalSection(&FileMapAccess);
+		return -1;
+	}
 
 	
 	//Check if any other user has this file part and put his data here
@@ -549,10 +576,10 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 			
 			if(waitResult == WAIT_OBJECT_0 + 1)
 			{
-				EnterCriticalSection(&FileMapAccess);
+				EnterCriticalSection(&QueueAccess);
 				printf("\nSoket %d primio", i);
 				incomingRequestsQueue.push(acceptedSockets + i);
-				LeaveCriticalSection(&FileMapAccess);
+				LeaveCriticalSection(&QueueAccess);
 				ReleaseSemaphore(FullQueue, 1, NULL);
 				//Add socket index to processing list to avoid double reading
 				EnterCriticalSection(&ProcessingSocketsAccess);
