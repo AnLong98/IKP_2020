@@ -15,7 +15,7 @@
 #include "../FileIO_Functions/FileIO.h"
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
-#define SERVER_THREADS 4
+#define SERVER_THREADS 6
 #define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
 using namespace std;
@@ -48,10 +48,6 @@ int socketsTaken = 0;
 
 int  main(void)
 {
-	SYSTEM_INFO sysinfo;
-	GetSystemInfo(&sysinfo);
-	const int numCPU = sysinfo.dwNumberOfProcessors;
-
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
@@ -62,15 +58,9 @@ int  main(void)
 	fd_set readfds;
 	unsigned long mode = 1; //non-blocking mode
 
-	HANDLE processor1 = NULL;
-	HANDLE processor2 = NULL;
-	HANDLE processor3 = NULL;
-	HANDLE processor4 = NULL;
+	HANDLE processors[SERVER_THREADS] = { NULL };
+	DWORD processorIDs[SERVER_THREADS];
 
-	DWORD Processor1ID;
-	DWORD Processor2ID;
-	DWORD Processor3ID;
-	DWORD Processor4ID;
 
 	//Create Semaphores
 	EmptyQueue = CreateSemaphore(0, SERVER_THREADS, SERVER_THREADS, NULL);
@@ -86,30 +76,29 @@ int  main(void)
 		InitializeCriticalSection(&AcceptedSocketsAccess);
 		InitializeCriticalSection(&ProcessingSocketsAccess);
 
-		processor1 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor1ID);
-		processor2 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor2ID);
-		processor3 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor3ID);
-		processor4 = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, &Processor4ID);
+		for(int i = 0; i < SERVER_THREADS; i++)
+			processors[i] = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, processorIDs + i);
 
-		if (!processor1 || !processor2 || !processor3 || !processor4) {
+		for (int i = 0; i < SERVER_THREADS; i++)
+		{
+			if (!processors[i]) {
 
-			ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
-			printf("\nReleased finish");
-			
-			SAFE_DELETE_HANDLE(processor1);
-			SAFE_DELETE_HANDLE(processor2);
-			SAFE_DELETE_HANDLE(processor3);
-			SAFE_DELETE_HANDLE(processor4);
-			SAFE_DELETE_HANDLE(EmptyQueue);
-			SAFE_DELETE_HANDLE(FullQueue);
-			SAFE_DELETE_HANDLE(FinishSignal);
+				ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+				printf("\nReleased finish");
 
-			DeleteCriticalSection(&QueueAccess);
-			DeleteCriticalSection(&FileMapAccess);
-			DeleteCriticalSection(&ClientListAccess);
-			DeleteCriticalSection(&AcceptedSocketsAccess);
-			DeleteCriticalSection(&ProcessingSocketsAccess);
-			return 0;
+				for(int i = 0; i < SERVER_THREADS; i++)
+					SAFE_DELETE_HANDLE(processors[i]);
+				SAFE_DELETE_HANDLE(EmptyQueue);
+				SAFE_DELETE_HANDLE(FullQueue);
+				SAFE_DELETE_HANDLE(FinishSignal);
+
+				DeleteCriticalSection(&QueueAccess);
+				DeleteCriticalSection(&FileMapAccess);
+				DeleteCriticalSection(&ClientListAccess);
+				DeleteCriticalSection(&AcceptedSocketsAccess);
+				DeleteCriticalSection(&ProcessingSocketsAccess);
+				return 0;
+			}
 		}
 	}
 
@@ -213,8 +202,11 @@ int  main(void)
 		else if (result == SOCKET_ERROR) {
 
 			//TODO: Handle this error, check which socket cause error and see if it is in sockets to close list
+			
 
 			printf("Errorcina je %d ", WSAGetLastError());
+			ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
+			break;
 		}
 		else {
 			if (FD_ISSET(listenSocket, &readfds) && socketsTaken < MAX_CLIENTS)
@@ -235,6 +227,18 @@ int  main(void)
 
 
 	}
+
+	for (int i = 0; i < SERVER_THREADS; i++)
+		SAFE_DELETE_HANDLE(processors[i]);
+	SAFE_DELETE_HANDLE(EmptyQueue);
+	SAFE_DELETE_HANDLE(FullQueue);
+	SAFE_DELETE_HANDLE(FinishSignal);
+
+	DeleteCriticalSection(&QueueAccess);
+	DeleteCriticalSection(&FileMapAccess);
+	DeleteCriticalSection(&ClientListAccess);
+	DeleteCriticalSection(&AcceptedSocketsAccess);
+	DeleteCriticalSection(&ProcessingSocketsAccess);
 
 	for (int i = 0; i < socketsTaken; i++)
 	{
