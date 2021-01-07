@@ -154,6 +154,9 @@
     <ClCompile Include="Client.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\FileIO_Functions\FileIO_Functions.vcxproj">
+      <Project>{da8e0e4e-e2e3-48e0-aacd-db28d188e179}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\PeerToPeerFileTransferFunctions\PeerToPeerFileTransferFunctions.vcxproj">
       <Project>{fa3640ae-e169-4c0f-991c-4077da2f3424}</Project>
     </ProjectReference>

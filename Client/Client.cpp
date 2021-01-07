@@ -15,17 +15,23 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
+#include "../FileIO_Functions/FileIO.h"
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
 #define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
+typedef struct CLIENT_FILE_PART_INFO
+{
+	char filename[MAX_FILE_NAME]; //fajl za koji cuvam delic
+	char* partBuffer;
+}C_FILE_PART_INFO;
 
-typedef struct CLIENT_FILE_PART
+typedef struct CLIENT_DOWNLOADING_FILE
 {
 	unsigned int filePartNumber;
 	unsigned int partSize;
 	char* partStartPointer;
-}C_F_PART;
+}C_DOWNLOADING_PART;
 
 
 HANDLE finishSignal;
@@ -35,7 +41,11 @@ CRITICAL_SECTION FileAccess;
 
 bool InitializeWindowsSockets();
 DWORD WINAPI ProcessIncomingFileParts(LPVOID param);
+
+
 SOCKET listenSocket;
+C_FILE_PART_INFO allParts[10];  //max 10 fajlova u jednom trenutku
+int filesRecieved = 0; 
 
 int main()
 {
@@ -223,7 +233,10 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 
 	printf("\n%s", file.fileName);
 
-	SendFileRequest(connectSocket, file);
+	if (SendFileRequest(connectSocket, file) == -1)
+	{
+		printf("SendFileRequest return an error.");
+	}
 
 
 	printf("\nFiles sent to server. Waiting for response...");
@@ -237,11 +250,32 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 	char* data = NULL;
 	unsigned int length;
 	int partNumber;
+	char buff[10000] = { 0 };
+	unsigned int prevLength = 0;
+	CLIENT_FILE_PART_INFO part;
 
 	for (int i = 0; i < (int)response.serverPartsNumber; i++)
 	{
 		RecvFilePart(connectSocket, &data, &length, &partNumber);
-		printf("\nData: %s\nLength:%d\nPartNumber: %d", *data, length, partNumber);
+		if (partNumber == response.filePartToStore)
+		{
+			strcpy(part.filename, file.fileName);
+			part.partBuffer = (char*)malloc(length);
+			strcpy(part.partBuffer, data);
+			allParts[filesRecieved++] = part; //stavljam delic za slanje drugim klijentima u niz
+		}
+
+		for (int j = 0; j < length; j++)
+		{
+			buff[prevLength + j] = *(data + j);
+		}
+
+		prevLength += length;
+		//print buffer posle svakog delica dodatog.
+		printf("\nData: %s\nLength:%d\nPartNumber: %d", buff, length, partNumber);
+	
 	}
+
+	WriteFileIntoMemory(file.fileName, buff, strlen(buff));
 
 }
