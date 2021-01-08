@@ -10,29 +10,18 @@
 #include <stdlib.h>
 #include <time.h>
 #include <queue>
-#include <list>
 #include <unordered_map>
+#include <list> 
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
 #include "../FileIO_Functions/FileIO.h"
+#include "../ClientData/Client_Structs.h"
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
 #define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
-typedef struct CLIENT_FILE_PART_INFO
-{
-	char filename[MAX_FILE_NAME]; //fajl za koji cuvam delic
-	char* partBuffer;
-}C_FILE_PART_INFO;
-
-typedef struct CLIENT_DOWNLOADING_FILE
-{
-	unsigned int filePartNumber;
-	unsigned int partSize;
-	char* partStartPointer;
-}C_DOWNLOADING_PART;
-
+using namespace std;
 
 HANDLE finishSignal;
 
@@ -41,11 +30,13 @@ CRITICAL_SECTION FileAccess;
 
 bool InitializeWindowsSockets();
 DWORD WINAPI ProcessIncomingFileParts(LPVOID param);
+//void AddPartToFileBuffer(CLIENT_DOWNLOADING_FILE file, unsigned int fileSize);
 
 
 SOCKET listenSocket;
-C_FILE_PART_INFO allParts[10];  //max 10 fajlova u jednom trenutku
-int filesRecieved = 0; 
+CLIENT_DOWNLOADING_FILE wholeFile; //ovde delice koje dobijamo sastavljamo
+list <CLIENT_FILE_PART_INFO> fileParts;
+CLIENT_FILE_PART_INFO allParts[FILE_PARTS];
 
 int main()
 {
@@ -66,45 +57,8 @@ int main()
 	DWORD dwWaitResult;
 	DWORD Process1ID;
 
-	InitializeCriticalSection(&FileAccess);
+	//InitializeCriticalSection(&FileAccess);
 	InitializeCriticalSection(&UserInput);
-
-
-	/*if (!process1)
-	{
-		SAFE_DELETE_HANDLE(process1);
-
-		DeleteCriticalSection(&FileAccess);
-
-		return 0;
-	}*/
-
-	
-	
-/*
-	// OVAJ CONNECT PREBACITI DA RADI U ZASEBNOJ NITI.
-	connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	if (connectSocket == INVALID_SOCKET)
-	{
-		printf("socket failed with error: %ld", WSAGetLastError());
-		WSACleanup();
-		return 1;
-	}
-
-	sockaddr_in serverAddress;
-	serverAddress.sin_family = AF_INET;
-	InetPton(AF_INET, TEXT(SERVER_ADDRESS), &serverAddress.sin_addr.s_addr);
-	serverAddress.sin_port = htons(DEFAULT_PORT);
-
-	if (connect(connectSocket, (SOCKADDR*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR)
-	{
-		printf("Unable to connect to server.\n");
-		closesocket(connectSocket);
-		WSACleanup();
-		return 1;
-	}
-	*/
 
 	//LISTEN SOCKET ZA KLIJENTE
 	addrinfo *resultingAddress = NULL;
@@ -167,8 +121,7 @@ int main()
 		return 1;
 	}
 	
-
-	getchar();
+	getchar(); //ne zatvaraj klijenta dok nesto ne pritisnem.
 
 	return 0;
 }
@@ -187,10 +140,8 @@ bool InitializeWindowsSockets()
 
 DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 {
-	printf("\nNew thread started.");
 	SOCKET connectSocket = INVALID_SOCKET;
 
-	// OVAJ CONNECT PREBACITI DA RADI U ZASEBNOJ NITI.
 	connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (connectSocket == INVALID_SOCKET)
@@ -231,51 +182,75 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 
 	file.requesterListenAddress = socketAddress;
 
-	printf("\n%s", file.fileName);
-
 	if (SendFileRequest(connectSocket, file) == -1)
 	{
+		closesocket(connectSocket);
 		printf("SendFileRequest return an error.");
 	}
-
 
 	printf("\nFiles sent to server. Waiting for response...");
 
 	FILE_RESPONSE response;
 
-	RecvFileResponse(connectSocket, &response);
+	if (RecvFileResponse(connectSocket, &response) == -1)
+	{
+		closesocket(connectSocket);
+		printf("RecvFileResponse return an error.");
+	}
 
 	printf("\nResponse recieved from server. Waiting for parts from server...");
 
 	char* data = NULL;
 	unsigned int length;
 	int partNumber;
-	char buff[10000] = { 0 };
 	unsigned int prevLength = 0;
 	CLIENT_FILE_PART_INFO part;
+
+	strcpy(wholeFile.fileName, file.fileName);
+	unsigned int fileSize = response.fileSize;
+	wholeFile.bufferPointer = (char*)calloc(fileSize, fileSize);
 
 	for (int i = 0; i < (int)response.serverPartsNumber; i++)
 	{
 		RecvFilePart(connectSocket, &data, &length, &partNumber);
+
 		if (partNumber == response.filePartToStore)
 		{
 			strcpy(part.filename, file.fileName);
 			part.partBuffer = (char*)malloc(length);
 			strcpy(part.partBuffer, data);
-			allParts[filesRecieved++] = part; //stavljam delic za slanje drugim klijentima u niz
+			part.lenght = length;
+			fileParts.push_back(part); //ovde iskoristiti listu sto napravimo mi.
 		}
 
-		for (int j = 0; j < length; j++)
+		if (partNumber != 9)
 		{
-			buff[prevLength + j] = *(data + j);
+			memcpy(wholeFile.bufferPointer + length * partNumber, data, length);
+		}
+		else
+		{
+			memcpy(wholeFile.bufferPointer + prevLength * partNumber, data, length);
 		}
 
-		prevLength += length;
-		//print buffer posle svakog delica dodatog.
-		printf("\nData: %s\nLength:%d\nPartNumber: %d", buff, length, partNumber);
-	
+		wholeFile.partsDownloaded++;
+
+		prevLength = length;
+		
+		free(data);
+		data = NULL;
 	}
 
-	WriteFileIntoMemory(file.fileName, buff, strlen(buff));
+	if (wholeFile.partsDownloaded == FILE_PARTS)
+	{
+		WriteFileIntoMemory(wholeFile.fileName, wholeFile.bufferPointer, strlen(wholeFile.bufferPointer));
+
+	}
+
 
 }
+
+/*void AddPartToFileBuffer(CLIENT_DOWNLOADING_FILE file, unsigned int fileSize)
+{
+	if(file)
+}
+*/
