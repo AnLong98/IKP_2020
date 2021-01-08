@@ -32,7 +32,8 @@ bool InitializeWindowsSockets();
 DWORD WINAPI ProcessIncomingFileParts(LPVOID param);
 //void AddPartToFileBuffer(CLIENT_DOWNLOADING_FILE file, unsigned int fileSize);
 
-
+queue<FILE_PART_INFO> outgoingRequestQueue;
+queue<SOCKET*> incomingRequestQueue;
 SOCKET listenSocket;
 CLIENT_DOWNLOADING_FILE wholeFile; //ovde delice koje dobijamo sastavljamo
 list <CLIENT_FILE_PART_INFO> fileParts;
@@ -99,9 +100,10 @@ int main()
 		return 1;
 	}
 
+	printf("Client is up.");
+
 	process1 = CreateThread(NULL, 0, &ProcessIncomingFileParts, (LPVOID)0, 0, &Process1ID);
 
-	printf("Client is up.");
 
 	//CEKAM DA SE MOJA NIT ZAVRSI
 	dwWaitResult = WaitForSingleObject(
@@ -175,10 +177,10 @@ DWORD WINAPI ProcessIncomingFileParts(LPVOID param)
 	FILE_REQUEST file;
 	char filename[MAX_FILE_NAME];
 
-	EnterCriticalSection(&UserInput);
+	//EnterCriticalSection(&UserInput);
 	printf("\nEnter a file name: ");
 	gets_s(file.fileName, MAX_FILE_NAME);
-	LeaveCriticalSection(&UserInput);
+	//LeaveCriticalSection(&UserInput);
 
 	file.requesterListenAddress = socketAddress;
 
