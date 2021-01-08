@@ -25,6 +25,7 @@ typedef struct FILE_DATA
 	unsigned int partArraySize;
 	unsigned int partsOnClients;
 	unsigned int nextPartToAssign;
+	unsigned int fileSize;
 }F_DATA;
 
 /*

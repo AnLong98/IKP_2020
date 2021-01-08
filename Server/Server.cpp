@@ -338,6 +338,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileResponse.clientPartsNumber = 0;
 				fileResponse.filePartToStore = 0;
 				fileResponse.serverPartsNumber = 0;
+				fileResponse.fileSize = 0;
 				isAssignedWithPart = -1;
 			}
 			else //File is on server and loaded into buffer
@@ -347,6 +348,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileResponse.clientPartsNumber = 0;
 				fileResponse.filePartToStore = 0;
 				fileResponse.serverPartsNumber = FILE_PARTS;
+				fileResponse.fileSize = fileSize;
 
 				//Add server owned part indexes
 				for (int i = 0; i < FILE_PARTS; i++)serverOwnedParts[i] = i;
@@ -358,6 +360,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				fileData.nextPartToAssign = 0;
 				memcpy(fileData.fileName, fileRequest.fileName, MAX_FILE_NAME);
 				fileData.partsOnClients = 0;
+				fileData.fileSize = fileSize;
 
 				//Add new file data structure to map, no need for CS because no one owns this structure yet
 				fileInfoMap[fileRequest.fileName] = fileData;
@@ -565,6 +568,7 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 	response->fileExists = 1;
 	response->clientPartsNumber = clientOwnedPartsCount;
 	response->serverPartsNumber = serverOwnedPartsCount;
+	response->fileSize = fileData.fileSize;
 
 	int assignedPart = AssignFilePartToClient(request.requesterListenAddress, request.fileName);
 	if (assignedPart == -1)

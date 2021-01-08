@@ -27,6 +27,7 @@ typedef struct FILE_RESPONSE
 	unsigned int clientPartsNumber;
 	unsigned int serverPartsNumber;
 	unsigned int filePartToStore;
+	unsigned int fileSize;
 }F_RESPONSE;
 
 

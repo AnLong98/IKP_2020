@@ -23,7 +23,7 @@ public:
 	~Queue();							//DTOR
 	bool Dequeue();						//Remove element from the queue front, returns false if queue is empty
 	bool Enqueue(T value);				//Add value to the queue rear, returns false if queue is full
-	T GetFront();						//Get element from the front of the queue
+	bool GetFront(T* value);			//Get element from the front of the queue, returns true if queue is not empty
 	int Size();							//Get queue size
 	bool isEmpty();						//Check if empty
 	bool isFull();						//Check if full

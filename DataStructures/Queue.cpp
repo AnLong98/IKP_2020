@@ -55,9 +55,17 @@ bool Queue<T>::Enqueue(T value)
 
 // Utility function to return front element in the queue
 template <class T>
-T Queue<T>::GetFront()
+bool Queue<T>::GetFront(T* value)
 {
-	return elements[front];
+	queueMutex.lock();
+	if (isEmpty())
+	{
+		queueMutex.unlock();
+		return false;
+	}
+	*value = elements[front];
+	queueMutex.unlock();
+	return true;
 }
 
 // Utility function to return the size of the queue
