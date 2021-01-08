@@ -260,3 +260,5 @@ paket-files/
 __pycache__/
 *.pyc
 /Server/stefan.txt
+/Server/skripta.docx
+/Client/pedjica.txt
