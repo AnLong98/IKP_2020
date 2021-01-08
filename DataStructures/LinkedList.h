@@ -34,6 +34,7 @@ private:
 
 public:
 	LinkedList(int size = LIST_INITIAL_SIZE);        //CTOR
+	~LinkedList();									//DTOR
 	bool PushFront(T element);						//Add element to the front of the list, returns true if successfull
 	bool PushBack(T element);						//Add element to the rear of the list, returns true if successfull
 	ListNode<T> AcquireIteratorNodeBack();			//returns back node and locks list, unlock needs to be called after search has ended

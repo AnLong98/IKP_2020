@@ -63,7 +63,7 @@ int  main(void)
 
 
 	//Create Semaphores
-	EmptyQueue = CreateSemaphore(0, SERVER_THREADS, SERVER_THREADS, NULL);
+	EmptyQueue = CreateSemaphore(0, MAX_QUEUE, MAX_QUEUE, NULL);
 	FullQueue = CreateSemaphore(0, 0, SERVER_THREADS, NULL);
 	FinishSignal = CreateSemaphore(0, 0, SERVER_THREADS, NULL);
 
