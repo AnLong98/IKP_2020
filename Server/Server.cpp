@@ -401,8 +401,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			continue; //Skip processing as socket was compromised
 		}
 		if (isAssignedWithPart == 0)
+		{
 			AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName);
-		AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress);
+		}
+		if(isAssignedWithPart != -1)
+			AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress);
 		ReleaseSemaphore(EmptyQueue, 1, NULL);
 		printf("\nReleased empty queue");
 	}
