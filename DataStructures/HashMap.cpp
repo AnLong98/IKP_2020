@@ -1,4 +1,4 @@
-#include "../DataStructures/HashMap.h"
+/*#include "../DataStructures/HashMap.h"
 
 template <class T>
 HashMapNode<T>::HashMapNode(char* key, T value)
@@ -202,6 +202,7 @@ void HashMap<T>::Delete(char* key)
 	{
 		free(node->key);
 		node->key = NULL;
+		countUnique--;
 		mapMutex.unlock();
 		return;
 	}
@@ -221,6 +222,7 @@ void HashMap<T>::Delete(char* key)
 		first->key = (char*)malloc(strlen(nodeNext->key));
 		strcpy(first->key, nodeNext->key);//Store last's key in first's
 		delete nodeNext; //delete last
+		countUnique--;
 		mapMutex.unlock();
 		return;
 	}
@@ -233,6 +235,7 @@ void HashMap<T>::Delete(char* key)
 			node->next = nodeNext->next;
 			nodeNext->next = NULL;
 			delete nodeNext;
+			countUnique--;
 			mapMutex.unlock();
 			return true;
 		}
@@ -243,4 +246,4 @@ void HashMap<T>::Delete(char* key)
 
 	mapMutex.unlock();
 	return false;
-}
+}*/
