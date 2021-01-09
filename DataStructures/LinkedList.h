@@ -2,7 +2,6 @@
 #include <iostream>
 #include <cstdlib>
 #include <mutex>
-#define LIST_INITIAL_SIZE 20
 using namespace std;
 
 //class for linked list node
@@ -15,6 +14,7 @@ private:
 	ListNode* previous;
 	
 public:
+	~ListNode();
 	T GetValue();
 	ListNode Next();
 	ListNode Previous();
@@ -33,7 +33,7 @@ private:
 	int count;					// current size of the list
 
 public:
-	LinkedList(int size = LIST_INITIAL_SIZE);        //CTOR
+	LinkedList();        //CTOR
 	~LinkedList();									//DTOR
 	bool PushFront(T element);						//Add element to the front of the list, returns true if successfull
 	bool PushBack(T element);						//Add element to the rear of the list, returns true if successfull

@@ -13,6 +13,12 @@ private:
 	T value;
 	HashMapNode* next;
 	template <class T> friend class HashMap;
+
+public:
+	HashMapNode(char* key, T value);		//ctor
+	HashMapNode();							//ctor
+	~HashMapNode();							//DTOR
+
 };
 
 template <class T>
@@ -29,6 +35,7 @@ public:
 	HashMap(unsigned int size = INITIAL_MAP_SIZE);		//CTOR
 	~HashMap();											//DTOR
 	void Insert(char* key, T value);					//Method for inserting a value in hash map, replaces existing one with the same key
+	void Delete(char* key);								//Method for deleting a value in hash map, returns false if not found
 	bool Get(char* key, T* value);						//Method for getting value by key, value is stored in value pointer, returns false if key doesn't exist
 	bool DoesKeyExist(char* key);						//Checks if key exists in hash map
 };
