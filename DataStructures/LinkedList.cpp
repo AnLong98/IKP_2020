@@ -1,4 +1,12 @@
-#include "../DataStructures/LinkedList.h"
+/*#include "../DataStructures/LinkedList.h"
+
+// Constructor to initialize list
+template <class T>
+ ListNode<T>::~ListNode()
+{
+	 if (this->next != NULL)
+		 delete this->next;
+}
 
 // Constructor to initialize list
 template <class T>
@@ -23,13 +31,24 @@ ListNode<T> ListNode<T>::Previous()
 
 // Constructor to initialize list
 template <class T>
-LinkedList<T>::LinkedList(int size)
+LinkedList<T>::LinkedList()
 {
-	head = (T*)malloc(size * sizeof(T));
+	head = NULL;
 	count = 0;
 	rear = head;
 
 }
+
+// Constructor to initialize list
+template <class T>
+LinkedList<T>::~LinkedList()
+{
+	if (head != NULL)
+		delete head;
+
+}
+
+
 
 // Utility function to check if the list is empty
 template <class T>
@@ -54,21 +73,21 @@ bool LinkedList<T>::PushFront(T element)
 
 	if (count == 0)
 	{
-		ListNode<T> newNode = new ListNode<T>();
-		newNode.value = element;
-		newNode.previous = NULL;
-		newNode.next = NULL;
-		head = &newNode;
-		rear = &newNode;
+		ListNode<T>* newNode = new ListNode<T>();
+		newNode->value = element;
+		newNode->previous = NULL;
+		newNode->next = NULL;
+		head = newNode;
+		rear = newNode;
 		count++;
 		listMutex.unlock();
 		return true;
 	}
-	ListNode<T> newNode = new ListNode<T>();
-	newNode.value = element;
-	newNode.previous = NULL;
-	newNode.next = head;
-	head = &newNode;
+	ListNode<T>* newNode = new ListNode<T>();
+	newNode->value = element;
+	newNode->previous = NULL;
+	newNode->next = head;
+	head = newNode;
 	count++;
 	listMutex.unlock();
 	return true;
@@ -82,21 +101,21 @@ bool LinkedList<T>::PushBack(T element)
 
 	if (count == 0)
 	{
-		ListNode<T> newNode = new ListNode<T>();
-		newNode.value = element;
-		newNode.previous = NULL;
-		newNode.next = NULL;
-		head = &newNode;
-		rear = &newNode;
+		ListNode<T>* newNode = new ListNode<T>();
+		newNode->value = element;
+		newNode->previous = NULL;
+		newNode->next = NULL;
+		head = newNode;
+		rear = newNode;
 		count++;
 		listMutex.unlock();
 		return true;
 	}
-	ListNode<T> newNode = new ListNode<T>();
-	newNode.value = element;
-	newNode.previous = rear;
-	newNode.next = NULL;
-	rear = &newNode;
+	ListNode<T>* newNode = new ListNode<T>();
+	newNode->value = element;
+	newNode->previous = rear;
+	newNode->next = NULL;
+	rear = newNode;
 	count++;
 	listMutex.unlock();
 	return true;
@@ -124,6 +143,8 @@ bool LinkedList<T>::PopFront(T* value)
 		head = frontNode->next;
 		head->previous = NULL;
 	}
+	frontNode->next = NULL;
+	frontNode->previous = NULL;
 	delete frontNode;
 	count--;
 	listMutex.unlock();
@@ -152,6 +173,8 @@ bool LinkedList<T>::PopBack(T* value)
 		rear = backNode->previous;
 		rear->next = NULL;
 	}
+	backNode->next = NULL;
+	backNode->previous = NULL;
 	delete backNode;
 	count--;
 	listMutex.unlock();
@@ -177,6 +200,8 @@ bool LinkedList<T>::RemoveElement(ListNode<T> node)
 			head = NULL;
 			rear = NULL;
 			count--;
+			search->next == NULL;
+			search->previous = NULL;
 			delete search;
 			listMutex.unlock();
 			return true;
@@ -186,6 +211,8 @@ bool LinkedList<T>::RemoveElement(ListNode<T> node)
 			(search->previous)->next = search->next;
 			(search->next)->previous = search->previous;
 			count--;
+			search->next = NULL;
+			search->previous = NULL;
 			delete search;
 			listMutex.unlock();
 			return true;
@@ -197,7 +224,7 @@ bool LinkedList<T>::RemoveElement(ListNode<T> node)
 	return false;
 }
 
-// Utility function to remove list element
+// Utility function to acquire iterator to rear
 template <class T>
 ListNode<T> LinkedList<T>::AcquireIteratorNodeBack()
 {
@@ -210,7 +237,7 @@ ListNode<T> LinkedList<T>::AcquireIteratorNodeBack()
 	return NULL;
 }
 
-// Utility function to remove list element
+// Utility function to acquire iterator to front
 template <class T>
 ListNode<T> LinkedList<T>::AcquireIteratorNodeFront()
 {
@@ -223,7 +250,7 @@ ListNode<T> LinkedList<T>::AcquireIteratorNodeFront()
 	return NULL;
 }
 
-// Utility function to remove list element
+// Utility function to release iterator
 template <class T>
 bool LinkedList<T>::ReleaseIterator()
 {
@@ -231,4 +258,4 @@ bool LinkedList<T>::ReleaseIterator()
 	listMutex.unlock();
 
 	return !isLocked;
-}
+}*/
