@@ -1,4 +1,4 @@
-#include "../FTPServerFunctions/ServerFuncs.h"
+#include "../FTPServerFunctions/ConnectionFuncs.h"
 
 int ShutdownConnection(SOCKET* socket)
 {

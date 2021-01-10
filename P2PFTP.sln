@@ -7,7 +7,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Server", "Server\Server.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PeerToPeerFileTransferFunctions", "PeerToPeerFileTransferFunctions\PeerToPeerFileTransferFunctions.vcxproj", "{FA3640AE-E169-4C0F-991C-4077DA2F3424}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FTPServerFunctions", "FTPServerFunctions\FTPServerFunctions.vcxproj", "{E1EF2946-814F-4CE5-9FC6-EC9AC8A9C885}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ConnectionFuncs", "FTPServerFunctions\FTPServerFunctions.vcxproj", "{E1EF2946-814F-4CE5-9FC6-EC9AC8A9C885}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FileIO_Functions", "FileIO_Functions\FileIO_Functions.vcxproj", "{DA8E0E4E-E2E3-48E0-AACD-DB28D188E179}"
 EndProject

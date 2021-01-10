@@ -19,11 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ServerFuncs.h" />
-    <ClInclude Include="Server_Structs.h" />
+    <ClInclude Include="ConnectionFuncs.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ServerFuncs.cpp" />
+    <ClCompile Include="ConnectionFuncs.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
@@ -31,6 +30,7 @@
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>FTPServerFunctions</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <ProjectName>ConnectionFuncs</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

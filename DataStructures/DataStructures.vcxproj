@@ -24,8 +24,6 @@
     <ClInclude Include="Queue.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="HashMap.cpp" />
-    <ClCompile Include="LinkedList.cpp" />
     <ClCompile Include="Queue.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
