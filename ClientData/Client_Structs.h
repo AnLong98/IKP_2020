@@ -23,6 +23,15 @@ typedef struct CLIENT_DOWNLOADING_FILE
 	char fileName[MAX_FILE_NAME];
 	char* bufferPointer;
 	unsigned int partsDownloaded;
+	int fileSize;
+	int filePartToStore;
 }C_DOWNLOADING_PART;
+
+typedef struct CLIENT_FILE_PART
+{
+	char fileName[MAX_FILE_NAME];
+	FILE_PART_INFO filePartInfo;
+
+}C_FILE_PART;
 
 #endif
