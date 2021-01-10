@@ -376,7 +376,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 
 	unsigned int fileSize = response.fileSize;
 	//ovaj deo mi je kritican, mislim da ce raditi ovako, ali nisam siguran.
-	wholeFile.bufferPointer = (char*)calloc(fileSize, fileSize);
+	wholeFile.bufferPointer = (char*)calloc(fileSize, sizeof(char));
 
 
 	CLIENT_FILE_PART clientFilePart;
@@ -419,7 +419,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 	{
 		if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1)
 		{
-			printf("\nNe moze se RecvFilePart sa servera.");
+			printf("\nNe moze se RecvFilePart sa servera. %ld", WSAGetLastError());
 			closesocket(connectSocket);
 		}
 
