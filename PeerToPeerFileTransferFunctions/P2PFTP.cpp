@@ -5,30 +5,54 @@
 int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 {
 	char buffer[BUFFER];
-	_itoa_s(ntohl(partNumber), buffer, 10);
-	// #1. Send file part number
-	int iResult = send(s, buffer, BUFFER, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	int iResult;
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		
+		_itoa_s(ntohl(partNumber), buffer, 10);
+		// #1. Send file part number
+		iResult = send(s, buffer, BUFFER, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			return -1;
+		}
+		break;
 	}
 
-	// #2. Send file part size
-	_itoa_s(ntohl(length), buffer, 10);
-	iResult = send(s, buffer, BUFFER, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		// #2. Send file part size
+		_itoa_s(ntohl(length), buffer, 10);
+		iResult = send(s, buffer, BUFFER, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 
 	int bytesSent = 0;
 	// #3. Send file part 
 	do {
-		iResult = send(s, data + bytesSent, length-bytesSent, 0);
+		iResult = send(s, data + bytesSent, length - bytesSent, 0);
 		if (iResult == SOCKET_ERROR || iResult == 0)
 		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
 			//HANDLE
 			return -1;
 		}
@@ -36,6 +60,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 	} while (bytesSent < length);
 
 	return 0;
+	
 
 }
 

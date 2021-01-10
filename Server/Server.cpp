@@ -386,7 +386,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			FILE_PART partToSend = fileParts[partIndex];
 			if (SendFilePart(*requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
 			{
-				printf("\nFailed to send part number %d. Shutting down connection to client.", i);
+				printf("\nFailed to send part number %d. Shutting down connection to client. Error %ld", i, WSAGetLastError());
 				RemoveClientInfo(requestSocket);
 				EnterCriticalSection(&AcceptedSocketsAccess);
 				ShutdownConnection(requestSocket);
