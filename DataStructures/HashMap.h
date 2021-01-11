@@ -2,7 +2,6 @@
 #include <iostream>
 #include <cstdlib>
 #include <mutex>
-#define _CRT_SECURE_NO_WARNINGS 1
 #define INITIAL_MAP_SIZE 50
 using namespace std;
 

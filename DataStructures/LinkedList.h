@@ -263,7 +263,7 @@ bool LinkedList<T>::RemoveElement(ListNode<T> node)
 			head = nullptr;
 			rear = nullptr;
 			count--;
-			search->next == nullptr;
+			search->next = nullptr;
 			search->previous = nullptr;
 			delete search;
 			listMutex.unlock();

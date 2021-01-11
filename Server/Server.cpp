@@ -9,9 +9,9 @@
 #include <unordered_map>
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
-#include "./ServerStructs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
 #include "../FTPServerFunctions/ConnectionFuncs.h"
+#include "../ServerFunctions/ServerStructs.h"
 #include "../FileIO_Functions/FileIO.h"
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
