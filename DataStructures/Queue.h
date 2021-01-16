@@ -1,6 +1,6 @@
 #include <iostream>
 #include <cstdlib>
-#include <mutex>
+#include <Windows.h>
 using namespace std;
 
 // define default capacity of the queue
@@ -11,17 +11,18 @@ template <class T>
 class Queue
 {
 private:
-	mutex queueMutex;	  //Queue mutex
-	T *elements;         // array to store queue elements
-	int capacity;		// maximum capacity of the queue
-	int front;			// front points to front element in the queue (if any)
-	int rear;			// rear points to last element in the queue
-	int count;			// current size of the queue
+	CRITICAL_SECTION QueueCS;	  //Queue mutex
+	T *elements;					// array to store queue elements
+	int capacity;				// maximum capacity of the queue
+	int front;					// front points to front element in the queue (if any)
+	int rear;					// rear points to last element in the queue
+	int count;					// current size of the queue
 
 public:
 	Queue(int size = QUEUE_SIZE);        //CTOR
 	~Queue();							//DTOR
 	bool Dequeue();						//Remove element from the queue front, returns false if queue is empty
+	bool DequeueGet(T* value);			//Remove element from the queue front and places it as return value in passed pointer. Returns false if queue is empty
 	bool Enqueue(T value);				//Add value to the queue rear, returns false if queue is full
 	bool GetFront(T* value);			//Get element from the front of the queue, returns true if queue is not empty
 	int Size();							//Get queue size
@@ -33,6 +34,7 @@ public:
 template <class T>
 Queue<T>::Queue(int size)
 {
+	InitializeCriticalSection(QueueCS);
 	elements = new T[size];
 	capacity = size;
 	front = 0;
@@ -44,6 +46,7 @@ Queue<T>::Queue(int size)
 template <class T>
 Queue<T>::~Queue()
 {
+	DeleteCriticalSection(QueueCS);
 	delete[] elements;
 }
 
@@ -51,34 +54,52 @@ Queue<T>::~Queue()
 template <class T>
 bool Queue<T>::Dequeue()
 {
-	queueMutex.lock();
+	EnterCriticalSection(&QueueCS);
 	if (isEmpty())
 	{
-		queueMutex.unlock();
+		LeaveCriticalSection(&QueueCS);
 		return false;
 	}
 
 	front = (front + 1) % capacity;
 	count--;
-	queueMutex.unlock();
+	LeaveCriticalSection(&QueueCS);
 	return true;
 }
+
+// Utility function to remove front element from the queue
+template <class T>
+bool Queue<T>::DequeueGet(T* value)
+{
+	EnterCriticalSection(&QueueCS);
+	if (isEmpty())
+	{
+		LeaveCriticalSection(&QueueCS);
+		return false;
+	}
+	*value = elements[front];
+	front = (front + 1) % capacity;
+	count--;
+	LeaveCriticalSection(&QueueCS);
+	return true;
+}
+
 
 // Utility function to add an item to the queue
 template <class T>
 bool Queue<T>::Enqueue(T value)
 {
-	queueMutex.lock();
+	EnterCriticalSection(&QueueCS);
 	if (isFull())
 	{
-		queueMutex.unlock();
+		LeaveCriticalSection(&QueueCS);
 		return false;
 	}
 
 	rear = (rear + 1) % capacity;
 	elements[rear] = value;
 	count++;
-	queueMutex.unlock();
+	LeaveCriticalSection(&QueueCS);
 	return true;
 }
 
@@ -86,14 +107,14 @@ bool Queue<T>::Enqueue(T value)
 template <class T>
 bool Queue<T>::GetFront(T* value)
 {
-	queueMutex.lock();
+	EnterCriticalSection(&QueueCS);
 	if (isEmpty())
 	{
-		queueMutex.unlock();
+		LeaveCriticalSection(&QueueCS);
 		return false;
 	}
 	*value = elements[front];
-	queueMutex.unlock();
+	LeaveCriticalSection(&QueueCS);
 	return true;
 }
 

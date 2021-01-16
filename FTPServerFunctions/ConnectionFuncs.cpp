@@ -48,3 +48,28 @@ int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeInd
 	}
 	return -1;
 }
+
+int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds, Queue<SOCKET*>* communicationQueue, HashMap<SOCKET*>* processingSocketsMap)
+{
+	int setSocketsCount = 0;
+	for (int i = 0; i < *socketsTaken; i++)
+	{
+		if (processingSocketsMap->DoesKeyExist((char*)(acceptedSockets + i)))
+		{
+			continue;  //check if socket is already under processing
+		}
+		if (FD_ISSET(acceptedSockets[i], readfds))
+		{
+			if (communicationQueue->isFull())
+				return setSocketsCount;
+			printf("\nSoket %d primio", i);
+			communicationQueue->Enqueue(acceptedSockets + i);
+			//Add socket to processing map to avoid double reading
+			processingSocketsMap->Insert((const char*)(acceptedSockets + i), acceptedSockets + i);
+			setSocketsCount++;
+		}
+
+	}
+
+	return setSocketsCount;
+}

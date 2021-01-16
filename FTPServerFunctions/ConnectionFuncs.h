@@ -1,5 +1,8 @@
 #pragma once
 #include <WinSock2.h>
+#include "../DataStructures/Queue.h"
+#include "../DataStructures/HashMap.h"
+
 /*
 	Shuts down connection for both sides on passed socket.
 	socket - Socket to shut down 
@@ -29,3 +32,15 @@ int AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET li
 */
 // THREAD UNSAFE
 int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeIndex);
+
+
+/*
+	Checks which sockets from acceptedSockets list are set and places them onto queue.
+	acceptedSockets - Sockets array in which accepted socket is stored.
+	freeIndex - pointer to index of free place in array, will be decremented
+	socket - Socket to remove
+
+	Returns number of set sockets or -1 in case of failiure
+*/
+// THREAD UNSAFE
+int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds, Queue<SOCKET*>* communicationQueue, HashMap<SOCKET*>* processingSocketsMap);

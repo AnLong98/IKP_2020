@@ -1,7 +1,7 @@
 #pragma once
 #include <iostream>
 #include <cstdlib>
-#include <mutex>
+#include <Windows.h>
 #define INITIAL_MAP_SIZE 50
 using namespace std;
 
@@ -27,7 +27,7 @@ class HashMap
 {
 private:
 	HashMapNode<T>* nodes;					//Nodes array
-	mutex mapMutex;							//Mutex used for map access
+	CRITICAL_SECTION MapCS;				//Mutex used for map access
 	unsigned int size;						//Hash map maximum unique key spots without chained nodes
 	unsigned int countUnique;				//Current number of unique key spots in use
 	long long GetHash(const char* str);		//Hash function for string hashing
@@ -71,6 +71,7 @@ HashMapNode<T>::~HashMapNode()
 template <class T>
 HashMap<T>::HashMap(unsigned int size)
 {
+	InitializeCriticalSection(&MapCS);
 	nodes = new HashMapNode<T>[size];
 	for (int i = 0; i < size; i++)
 	{
@@ -86,6 +87,7 @@ HashMap<T>::HashMap(unsigned int size)
 template <class T>
 HashMap<T>::~HashMap()
 {
+	DeleteCriticalSection(&MapCS);
 	delete[] nodes;
 }
 
@@ -116,11 +118,11 @@ bool HashMap<T>::DoesKeyExist(const char* key)
 
 	unsigned long long hashValue = GetHash(key);
 
-	mapMutex.lock();
+	EnterCriticalSection(&MapCS);
 	unsigned int index = hashValue % this->size;
 	if (nodes[index].key == nullptr)
 	{
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return false;
 	}
 	else
@@ -130,7 +132,7 @@ bool HashMap<T>::DoesKeyExist(const char* key)
 		{
 			if (strcmp(node->key, key) == 0)
 			{
-				mapMutex.unlock();
+				LeaveCriticalSection(&MapCS);
 				return true;
 			}
 
@@ -138,7 +140,7 @@ bool HashMap<T>::DoesKeyExist(const char* key)
 		} while (node != nullptr);
 	}
 
-	mapMutex.unlock();
+	LeaveCriticalSection(&MapCS);
 	return false;
 
 }
@@ -149,7 +151,7 @@ void HashMap<T>::Insert(const char* key, T value)
 {
 	unsigned long long hashValue = GetHash(key);
 
-	mapMutex.lock();
+	EnterCriticalSection(&MapCS);
 	int index = hashValue % this->size;
 	if (nodes[index].key == nullptr)
 	{
@@ -157,7 +159,7 @@ void HashMap<T>::Insert(const char* key, T value)
 		strcpy(nodes[index].key, key);
 		nodes[index].value = value;
 		countUnique++;
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return;
 	}
 	else
@@ -171,7 +173,7 @@ void HashMap<T>::Insert(const char* key, T value)
 		if (strcmp(node->key, key) == 0) //Replace existing
 		{
 			node->value = value;
-			mapMutex.unlock();
+			LeaveCriticalSection(&MapCS);
 			return;
 		}
 		else //Add new
@@ -184,7 +186,7 @@ void HashMap<T>::Insert(const char* key, T value)
 		}
 	}
 
-	mapMutex.unlock();
+	LeaveCriticalSection(&MapCS);
 	return;
 }
 
@@ -197,11 +199,11 @@ bool HashMap<T>::Get(const char* key, T* value)
 
 	unsigned  long long hashValue = GetHash(key);
 
-	mapMutex.lock();
+	EnterCriticalSection(&MapCS);;
 	unsigned int index = hashValue % this->size;
 	if (nodes[index].key == nullptr)
 	{
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return false;
 	}
 	else
@@ -212,7 +214,7 @@ bool HashMap<T>::Get(const char* key, T* value)
 			if (strcmp(node->key, key) == 0)
 			{
 				*value = node->value;
-				mapMutex.unlock();
+				LeaveCriticalSection(&MapCS);
 				return true;
 			}
 
@@ -220,7 +222,7 @@ bool HashMap<T>::Get(const char* key, T* value)
 		} while (node != nullptr);
 	}
 
-	mapMutex.unlock();
+	LeaveCriticalSection(&MapCS);
 	return false;
 }
 
@@ -233,11 +235,11 @@ void HashMap<T>::Delete(const char* key)
 
 	unsigned long long hashValue = GetHash(key);
 
-	mapMutex.lock();
+	EnterCriticalSection(&MapCS);;
 	unsigned int index = hashValue % this->size;
 	if (nodes[index].key == nullptr)
 	{
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return;
 	}
 
@@ -247,7 +249,7 @@ void HashMap<T>::Delete(const char* key)
 		free(node->key);
 		node->key = nullptr;
 		countUnique--;
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return;
 	}
 	else if (strcmp(node->key, key) == 0 && node->next != nullptr)//if first element is to be deleted and there are chained collisions move last to it's spot
@@ -267,7 +269,7 @@ void HashMap<T>::Delete(const char* key)
 		strcpy(first->key, nodeNext->key);//Store last's key in first's
 		delete nodeNext; //delete last
 		countUnique--;
-		mapMutex.unlock();
+		LeaveCriticalSection(&MapCS);
 		return;
 	}
 
@@ -280,7 +282,7 @@ void HashMap<T>::Delete(const char* key)
 			nodeNext->next = nullptr;
 			delete nodeNext;
 			countUnique--;
-			mapMutex.unlock();
+			LeaveCriticalSection(&MapCS);
 			return;
 		}
 
@@ -288,6 +290,6 @@ void HashMap<T>::Delete(const char* key)
 		nodeNext = nodeNext->next;
 	} while (nodeNext != nullptr);
 
-	mapMutex.unlock();
+	LeaveCriticalSection(&MapCS);
 	return;
 }

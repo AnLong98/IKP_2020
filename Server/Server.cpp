@@ -4,9 +4,8 @@
 #include <winsock2.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <queue>
-#include <list>
-#include <unordered_map>
+#include "../DataStructures/HashMap.h"
+#include "../DataStructures/Queue.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
@@ -18,9 +17,7 @@
 #define SERVER_THREADS 6
 #define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
-using namespace std;
 bool InitializeWindowsSockets();
-int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds);
 int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART** unallocatedPartsArray);
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts);
 int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName);
@@ -28,26 +25,37 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientInfo);
 int RemoveClientInfo(SOCKET* clientSocket);
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
 
-//Global variables
-HANDLE EmptyQueue;						  // Semaphore which indicates how many (if any) empty spaces are available on queue.
-HANDLE FullQueue;						  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
-HANDLE FinishSignal;    				  // Semaphore to signalize threads to abort.
+				 
 CRITICAL_SECTION QueueAccess;			  // Critical section for queue access
 CRITICAL_SECTION FileMapAccess;			  // Critical section for file map access
 CRITICAL_SECTION ClientListAccess;			  // Critical section for clients list access
-CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
-CRITICAL_SECTION ProcessingSocketsAccess;			  // Critical section for processing sockets access
-
-//Data structures
-queue<SOCKET*> incomingRequestsQueue;	  //Queue on which sockets with incoming messages are stashed.
-unordered_map<string, FILE_DATA> fileInfoMap;
-list<CLIENT_INFO> clientInformationsList;
-SOCKET acceptedSockets[MAX_CLIENTS];
-int processingSockets[MAX_CLIENTS];
-int socketsTaken = 0;
 
 int  main(void)
 {
+	//Server data structures
+	HashMap<SOCKET*> processingSocketsMap;
+	HashMap<FILE_DATA> fileInfoMap;
+	Queue<SOCKET*> incomingRequestsQueue;
+	HashMap<CLIENT_INFO> clientInformationsMap;
+	SOCKET acceptedSockets[MAX_CLIENTS];
+	HANDLE FinishSignal;							  // Semaphore to signalize threads to abort.
+	HANDLE FullQueue;								  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
+	CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
+	int socketsTaken;
+
+	//Init server thread struct
+	SERVER_THREAD_DATA threadData;
+	threadData.acceptedSocketsArray = acceptedSockets;
+	threadData.clientInformationsMap = &clientInformationsMap;
+	threadData.fileInfoMap = &fileInfoMap;
+	threadData.FinishSignal = &FinishSignal;
+	threadData.FullQueue = &FullQueue;
+	threadData.incomingRequestsQueue = &incomingRequestsQueue;
+	threadData.processingSocketsMap = &processingSocketsMap;
+	threadData.socketsTaken = &socketsTaken;
+	threadData.AcceptedSocketsAccess = &AcceptedSocketsAccess;
+
+
 	// Socket used for listening for new clients 
 	SOCKET listenSocket = INVALID_SOCKET;
 	// Socket used for communication with client
@@ -63,21 +71,19 @@ int  main(void)
 
 
 	//Create Semaphores
-	EmptyQueue = CreateSemaphore(0, MAX_QUEUE, MAX_QUEUE, NULL);
 	FullQueue = CreateSemaphore(0, 0, SERVER_THREADS, NULL);
 	FinishSignal = CreateSemaphore(0, 0, SERVER_THREADS, NULL);
 
 	//Init critical sections and threads if semaphores are ok
-	if (EmptyQueue  && FullQueue && FinishSignal)
+	if (FullQueue && FinishSignal)
 	{
 		InitializeCriticalSection(&QueueAccess);
 		InitializeCriticalSection(&FileMapAccess);
 		InitializeCriticalSection(&ClientListAccess);
 		InitializeCriticalSection(&AcceptedSocketsAccess);
-		InitializeCriticalSection(&ProcessingSocketsAccess);
 
 		for(int i = 0; i < SERVER_THREADS; i++)
-			processors[i] = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)0, 0, processorIDs + i);
+			processors[i] = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)&threadData, 0, processorIDs + i);
 
 		for (int i = 0; i < SERVER_THREADS; i++)
 		{
@@ -88,7 +94,6 @@ int  main(void)
 
 				for(int i = 0; i < SERVER_THREADS; i++)
 					SAFE_DELETE_HANDLE(processors[i]);
-				SAFE_DELETE_HANDLE(EmptyQueue);
 				SAFE_DELETE_HANDLE(FullQueue);
 				SAFE_DELETE_HANDLE(FinishSignal);
 
@@ -96,7 +101,6 @@ int  main(void)
 				DeleteCriticalSection(&FileMapAccess);
 				DeleteCriticalSection(&ClientListAccess);
 				DeleteCriticalSection(&AcceptedSocketsAccess);
-				DeleteCriticalSection(&ProcessingSocketsAccess);
 				return 0;
 			}
 		}
@@ -219,8 +223,10 @@ int  main(void)
 
 			
 			EnterCriticalSection(&AcceptedSocketsAccess);
-			CheckSetSockets(&socketsTaken, acceptedSockets, &readfds);
+			int setSocketsCount = CheckSetSockets(&socketsTaken, acceptedSockets, &readfds, &incomingRequestsQueue, &processingSocketsMap);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
+			if (setSocketsCount > 0)
+				ReleaseSemaphore(FinishSignal, setSocketsCount, NULL);
 			
 
 		}
@@ -230,7 +236,6 @@ int  main(void)
 
 	for (int i = 0; i < SERVER_THREADS; i++)
 		SAFE_DELETE_HANDLE(processors[i]);
-	SAFE_DELETE_HANDLE(EmptyQueue);
 	SAFE_DELETE_HANDLE(FullQueue);
 	SAFE_DELETE_HANDLE(FinishSignal);
 
@@ -238,7 +243,6 @@ int  main(void)
 	DeleteCriticalSection(&FileMapAccess);
 	DeleteCriticalSection(&ClientListAccess);
 	DeleteCriticalSection(&AcceptedSocketsAccess);
-	DeleteCriticalSection(&ProcessingSocketsAccess);
 
 	for (int i = 0; i < socketsTaken; i++)
 	{
@@ -267,14 +271,22 @@ bool InitializeWindowsSockets()
 
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 {
+	SERVER_THREAD_DATA threadData = *((SERVER_THREAD_DATA*)param);
+	Queue<SOCKET*>* incomingRequestsQueue = threadData.incomingRequestsQueue;
+	SOCKET* acceptedSockets = threadData.acceptedSocketsArray;
+	CRITICAL_SECTION* AcceptedSocketsAccess = threadData.AcceptedSocketsAccess;
+	HashMap<SOCKET*>* processingSocketsMap = threadData.processingSocketsMap;
+	HashMap<FILE_DATA>* fileInfoMap = threadData.fileInfoMap;
+	int* socketsTaken = threadData.socketsTaken;
+
 	const int semaphoreNum = 2;
-	HANDLE semaphores[semaphoreNum] = { FinishSignal, FullQueue };
+	HANDLE semaphores[semaphoreNum] = { threadData.FinishSignal, threadData.FullQueue };
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
 		printf("Taken full queue");
-		EnterCriticalSection(&QueueAccess);
-		SOCKET* requestSocket = incomingRequestsQueue.front();  //Get request from queue
-		incomingRequestsQueue.pop();
-		LeaveCriticalSection(&QueueAccess);
+		SOCKET* requestSocket;
+		int getResult = incomingRequestsQueue->DequeueGet(&requestSocket);  //Get request from queue
+		if (getResult == 0)
+			continue;
 
 		FILE_DATA fileData;
 		FILE_PART* fileParts = NULL;
@@ -287,39 +299,27 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int result = RecvFileRequest(*requestSocket, &fileRequest);
 		if (result == -1)
 		{
-			int processingSocketIndex = requestSocket - acceptedSockets;
-			printf("\nDiskonektovao se %d", processingSocketIndex);
+
+			printf("\nDiskonektovao se %d", requestSocket - acceptedSockets);
 			RemoveClientInfo(requestSocket);
-			EnterCriticalSection(&AcceptedSocketsAccess);
+			EnterCriticalSection(AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
-			RemoveSocketFromArray(acceptedSockets,requestSocket, &socketsTaken );
-			
-			EnterCriticalSection(&ProcessingSocketsAccess);
-			for (int i = processingSocketIndex; i < MAX_CLIENTS - 1; i++)
-			{
-				processingSockets[i] = processingSockets[i + 1];
-			}
-			processingSockets[MAX_CLIENTS - 1] = 0;
-			LeaveCriticalSection(&ProcessingSocketsAccess);
-			LeaveCriticalSection(&AcceptedSocketsAccess);
-			ReleaseSemaphore(EmptyQueue, 1, NULL);
-			printf("\nReleased empty queue");
+			RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
+			processingSocketsMap->Delete((const char*)(requestSocket));
+			LeaveCriticalSection(AcceptedSocketsAccess);
 			continue;
 			
 		}
 
-		//Remove socket index from processing array
-		EnterCriticalSection(&ProcessingSocketsAccess);
-		processingSockets[requestSocket - acceptedSockets] = 0;
-		LeaveCriticalSection(&ProcessingSocketsAccess);
+		//Remove socket from processing map
+		processingSocketsMap->Delete((const char*)(requestSocket));
 		
-		size_t sizeFound = fileInfoMap.count(fileRequest.fileName);
+		int isFileLoaded = fileInfoMap->DoesKeyExist(fileRequest.fileName);
 		//LeaveCriticalSection(&FileMapAccess);
 
-		if ( sizeFound > 0)//File is loaded and can be given back to client
+		if (isFileLoaded)//File is loaded and can be given back to client
 		{
-			EnterCriticalSection(&FileMapAccess);
-			fileData = fileInfoMap.find(fileRequest.fileName)->second;
+			fileInfoMap->Get(fileRequest.fileName, &fileData);
 			LeaveCriticalSection(&FileMapAccess);
 			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts);
 			fileParts = fileData.filePartDataArray;
@@ -588,53 +588,6 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 	return 0;
 
 }
-
-
-int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds )
-{
-	for (int i = 0; i < *socketsTaken; i++)
-	{
-		EnterCriticalSection(&ProcessingSocketsAccess);
-		if (processingSockets[i] == 1)
-		{
-			LeaveCriticalSection(&ProcessingSocketsAccess);
-			continue;  //check if socket is already under processing
-		}
-		LeaveCriticalSection(&ProcessingSocketsAccess);
-
-		if (FD_ISSET(acceptedSockets[i], readfds))
-		{
-			const int semaphoreNum = 2;
-			HANDLE semaphores[semaphoreNum] = { FinishSignal, EmptyQueue };
-			//Ovde se zakuca ako iskljucim par klijenata
-			DWORD waitResult = WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE);
-			
-			if(waitResult == WAIT_OBJECT_0 + 1)
-			{
-				printf("\nTaken Empty queue");
-				EnterCriticalSection(&QueueAccess);
-				printf("\nSoket %d primio", i);
-				incomingRequestsQueue.push(acceptedSockets + i);
-				LeaveCriticalSection(&QueueAccess);
-				ReleaseSemaphore(FullQueue, 1, NULL);
-				printf("\nReleased full queue");
-				//Add socket index to processing list to avoid double reading
-				EnterCriticalSection(&ProcessingSocketsAccess);
-				processingSockets[i] = 1;
-				LeaveCriticalSection(&ProcessingSocketsAccess);
-					
-			}
-			else
-			{
-				return -1;
-			}
-		}
-
-	}
-
-	return 0;
-}
-
 
 int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress)
 {

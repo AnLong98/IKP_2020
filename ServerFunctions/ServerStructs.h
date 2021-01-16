@@ -1,6 +1,7 @@
 #pragma once
 #include <ws2tcpip.h>
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
+#include "../DataStructures/Queue.h"
 
 /*
 	Structure representing file part data stored on server
@@ -39,3 +40,20 @@ typedef struct CLIENT_INFO
 	unsigned int fileDataArraySize;
 	unsigned int ownedFilesCount;
 }C_INFO;
+
+
+/*
+	Structure representing informations that server threads use
+*/
+typedef struct SERVER_THREAD_DATA
+{
+	HashMap<SOCKET*>* processingSocketsMap;
+	HashMap<FILE_DATA>* fileInfoMap;
+	Queue<SOCKET*>* incomingRequestsQueue;
+	HashMap<CLIENT_INFO>* clientInformationsMap;
+	SOCKET* acceptedSocketsArray;
+	HANDLE* FinishSignal;
+	HANDLE* FullQueue;
+	CRITICAL_SECTION* AcceptedSocketsAccess;
+	int* socketsTaken;
+}S_DATA;
