@@ -1,3 +1,9 @@
+#pragma once
+
+#ifndef QUEUE_H
+#define QUEUE_H
+
+
 #include <iostream>
 #include <cstdlib>
 #include <Windows.h>
@@ -34,7 +40,7 @@ public:
 template <class T>
 Queue<T>::Queue(int size)
 {
-	InitializeCriticalSection(QueueCS);
+	InitializeCriticalSection(&QueueCS);
 	elements = new T[size];
 	capacity = size;
 	front = 0;
@@ -46,7 +52,7 @@ Queue<T>::Queue(int size)
 template <class T>
 Queue<T>::~Queue()
 {
-	DeleteCriticalSection(QueueCS);
+	DeleteCriticalSection(&QueueCS);
 	delete[] elements;
 }
 
@@ -138,3 +144,5 @@ bool Queue<T>::isFull()
 {
 	return (Size() == capacity);
 }
+
+#endif // !QUEUE_H

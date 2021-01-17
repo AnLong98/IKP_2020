@@ -1,34 +1,42 @@
 #include "../ServerFunctions/ClientInfoManagement.h"
 
-int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, LinkedList<CLIENT_INFO>* clientInformationsList )
+CRITICAL_SECTION ClientInfoAccess;
+int isInitClientInfoHandle = 0;
+
+void InitClientInfoHandle()
 {
-	//TODO ADD user's socket info 
+	InitializeCriticalSection(&ClientInfoAccess);
+	isInitClientInfoHandle = 1;
+}
 
-	int result;
-	ListNode<CLIENT_INFO> iterator = clientInformationsList->AcquireIteratorNodeFront(&result);
-	if (result != 0)//List is empty
+void DeleteClientInfoHandle()
+{
+	DeleteCriticalSection(&ClientInfoAccess);
+	isInitClientInfoHandle = 0;
+}
+
+int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, HashMap<CLIENT_INFO>* clientInformationsMap)
+{
+	if(!isInitClientInfoHandle)
+		return -2;
+	EnterCriticalSection(&ClientInfoAccess);
+	if (clientInformationsMap->DoesKeyExist((const char*)(socket))) //Client is already in info map
 	{
+		CLIENT_INFO info;
+		clientInformationsMap->Get((const char*)(socket), &info);
 
-		for (int i = 0; i < clientInformationsList->Count(); i++) {
-			CLIENT_INFO info = iterator.GetValue();
-			if (info.clientSocket == socket) //Client's socket already exists here so we will just append new data
-			{
-				if (info.fileDataArraySize == info.ownedFilesCount)
-				{
-					info.clientOwnedFiles = (FILE_DATA*)realloc(info.clientOwnedFiles, info.fileDataArraySize + FILE_PARTS);
-					info.fileDataArraySize *= 2;
-				}
-				info.clientOwnedFiles[info.ownedFilesCount] = data;
-				info.ownedFilesCount++;
-				clientInformationsList->ReleaseIterator();
-				clientInformationsList->RemoveElement(iterator);
-				clientInformationsList->PushFront(info);
-				return 0;
-			}
-			iterator = iterator.Next();
+		if (info.fileDataArraySize == info.ownedFilesCount)
+		{
+			info.clientOwnedFiles = (FILE_DATA*)realloc(info.clientOwnedFiles, info.fileDataArraySize + FILE_PARTS);
+			info.fileDataArraySize *= 2;
 		}
+		info.clientOwnedFiles[info.ownedFilesCount] = data;
+		info.ownedFilesCount++;
+		clientInformationsMap->Insert((const char*)(socket), info);
+		LeaveCriticalSection(&ClientInfoAccess);
+		return 0;
+
 	}
-	clientInformationsList->ReleaseIterator();
 
 	CLIENT_INFO info;
 	info.clientOwnedFiles = (FILE_DATA*)malloc(FILE_PARTS * sizeof(FILE_DATA));
@@ -37,41 +45,39 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, Lin
 	info.fileDataArraySize = FILE_PARTS;
 	info.ownedFilesCount = 1;
 	info.clientOwnedFiles[0] = data;
-	clientInformationsList->PushFront(info);
+	clientInformationsMap->Insert((const char*)(socket), info);
+	LeaveCriticalSection(&ClientInfoAccess);
 	return 0;
 
 }
 
 
-int RemoveClientInfo(SOCKET* clientSocket, LinkedList<CLIENT_INFO>* clientInformationsList)
+int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformationsMap)
 {
+	if (!isInitClientInfoHandle)
+		return -2;
 
-	int result;
-	ListNode<CLIENT_INFO> iterator = clientInformationsList->AcquireIteratorNodeFront(&result);
-
-	if (result == 0)
+	if (clientInformationsMap->DoesKeyExist((const char*)(socket))) //Client is already in info map
 	{
-		clientInformationsList->ReleaseIterator();
+		CLIENT_INFO info;
+		clientInformationsMap->Get((const char*)(socket), &info);
+
+		free(info.clientOwnedFiles);
+		clientInformationsMap->Delete((const char*)(clientSocket));
+		return 0;
+
+	}
+	else {
 		return -1;
 	}
 
-	for (int j = 0; j < clientInformationsList->Count(); j++) {
-		CLIENT_INFO info = iterator.GetValue();
-		if (info.clientSocket == clientSocket)
-		{
-			for (int i = 0; i < info.ownedFilesCount; i++)
-			{
-
-				UnassignFilePart(info.clientAddress, info.clientOwnedFiles[i].fileName);
-
-			}
-			free(info.clientOwnedFiles);
-			clientInformationsList->ReleaseIterator();
-			clientInformationsList->RemoveElement(iterator);
-			return 0;
-		}
-	}
-
-
-	return -1;
 }
+
+/*  Move this to file part management
+for (int i = 0; i < info.ownedFilesCount; i++)
+{
+
+	UnassignFilePart(info.clientAddress, info.clientOwnedFiles[i].fileName);
+
+}
+*/

@@ -1,5 +1,4 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
-#include <ws2tcpip.h>
 #define BUFFER 20
 
 int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
@@ -57,7 +56,7 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 			return -1;
 		}
 		bytesSent += iResult;
-	} while (bytesSent < length);
+	} while (bytesSent < (int)length);
 
 	return 0;
 	
@@ -104,7 +103,7 @@ int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 			return -1;
 		}
 		bytesReceived += iResult;
-	} while (bytesReceived < *length);
+	} while (bytesReceived < (int)(*length));
 
 	return 0;
 }
@@ -178,7 +177,7 @@ int RecvFileRequest(SOCKET s, FILE_REQUEST* request)
 
 int SendFileResponse(SOCKET s, FILE_RESPONSE response)
 {
-	for (int i = 0; i < response.clientPartsNumber; i++)
+	for (int i = 0; i < (int)response.clientPartsNumber; i++)
 	{
 		//Potentially change this to something more meaningful
 		response.clientParts[i].partNumber = htonl(response.clientParts[i].partNumber);
@@ -219,7 +218,7 @@ int RecvFileResponse(SOCKET s, FILE_RESPONSE* response)
 	response->filePartToStore = ntohl(response->filePartToStore);
 	response->serverPartsNumber = ntohl(response->serverPartsNumber);
 
-	for (int i = 0; i < response->clientPartsNumber; i++)
+	for (int i = 0; i < (int)response->clientPartsNumber; i++)
 	{
 		response->clientParts[i].partNumber = ntohl(response->clientParts[i].partNumber);
 		response->clientParts[i].clientOwnerAddress.sin_port = ntohs(response->clientParts[i].clientOwnerAddress.sin_port);

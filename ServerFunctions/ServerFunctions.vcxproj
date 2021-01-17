@@ -21,13 +21,11 @@
   <ItemGroup>
     <ClInclude Include="ClientInfoManagement.h" />
     <ClInclude Include="FilePartsManagement.h" />
-    <ClInclude Include="ServerResponse.h" />
     <ClInclude Include="ServerStructs.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ClientInfoManagement.cpp" />
     <ClCompile Include="FilePartsManagement.cpp" />
-    <ClCompile Include="ServerResponse.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

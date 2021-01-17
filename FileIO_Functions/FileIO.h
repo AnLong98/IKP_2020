@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef FILEIO_H
+#define FILEIO_H
+
 /*
 	Reads file into RAM memory. Allocates memory buffer needed to store whole file.
 	fileName - Name of file to be read
@@ -19,3 +22,4 @@ int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* 
 	Returns 0 if writing is successful, otherwise returns -1
 */
 int WriteFileIntoMemory(char* fileName, char* allocatedBufferPointer, size_t size);
+#endif // !FILEIO_H

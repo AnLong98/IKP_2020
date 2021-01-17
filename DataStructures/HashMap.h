@@ -1,4 +1,8 @@
 #pragma once
+
+#ifndef HASHMAP_H
+#define HASHMAP_H
+
 #include <iostream>
 #include <cstdlib>
 #include <Windows.h>
@@ -45,7 +49,7 @@ template <class T>
 HashMapNode<T>::HashMapNode(char* key, T value)
 {
 	this->key = (char*)malloc(strlen(key) + 1);
-	strcpy(this->key, key);
+	strcpy_s(this->key, strlen(key) + 1, key);
 	this->value = value;
 	this->next = nullptr;
 }
@@ -73,7 +77,7 @@ HashMap<T>::HashMap(unsigned int size)
 {
 	InitializeCriticalSection(&MapCS);
 	nodes = new HashMapNode<T>[size];
-	for (int i = 0; i < size; i++)
+	for (int i = 0; i < (int)size; i++)
 	{
 		nodes[i].next = nullptr;
 		nodes[i].key = nullptr;
@@ -98,11 +102,11 @@ long long HashMap<T>::GetHash(const char* key)
 {
 	// P and M
 	int p = 53; // english alphabet upper and lowercase
-	int m = 1e9 + 9; //very large number to prevent collision
+	int m = (int)(1e9 + 9); //very large number to prevent collision
 	long long powerOfP = 1;
 	long long hashVal = 0;
 
-	for (int i = 0; i < strlen(key); i++)
+	for (int i = 0; i < (int)strlen(key); i++)
 	{
 		hashVal = (hashVal + (key[i] - 'a' + 1) * powerOfP) % m;
 		powerOfP = (powerOfP * p) % m;
@@ -156,7 +160,7 @@ void HashMap<T>::Insert(const char* key, T value)
 	if (nodes[index].key == nullptr)
 	{
 		nodes[index].key = (char*)malloc(strlen(key) + 1);
-		strcpy(nodes[index].key, key);
+		strcpy_s(nodes[index].key, strlen(key) + 1, key);
 		nodes[index].value = value;
 		countUnique++;
 		LeaveCriticalSection(&MapCS);
@@ -266,7 +270,7 @@ void HashMap<T>::Delete(const char* key)
 		first->value = nodeNext->value; //Copy last's value to first
 		free(first->key);
 		first->key = (char*)malloc(strlen(nodeNext->key) + 1);
-		strcpy(first->key, nodeNext->key);//Store last's key in first's
+		strcpy_s(first->key, strlen(nodeNext->key) + 1, nodeNext->key);//Store last's key in first's
 		delete nodeNext; //delete last
 		countUnique--;
 		LeaveCriticalSection(&MapCS);
@@ -293,3 +297,5 @@ void HashMap<T>::Delete(const char* key)
 	LeaveCriticalSection(&MapCS);
 	return;
 }
+
+#endif

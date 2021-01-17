@@ -2,6 +2,7 @@
 #include <ws2tcpip.h>
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../DataStructures/Queue.h"
+#include "../DataStructures/HashMap.h"
 
 /*
 	Structure representing file part data stored on server
@@ -47,9 +48,9 @@ typedef struct CLIENT_INFO
 */
 typedef struct SERVER_THREAD_DATA
 {
-	HashMap<SOCKET*>* processingSocketsMap;
-	HashMap<FILE_DATA>* fileInfoMap;
-	Queue<SOCKET*>* incomingRequestsQueue;
+	HashMap<SOCKET*> * processingSocketsMap;
+	HashMap<FILE_DATA> * fileInfoMap;
+	Queue<SOCKET*> * incomingRequestsQueue;
 	HashMap<CLIENT_INFO>* clientInformationsMap;
 	SOCKET* acceptedSocketsArray;
 	HANDLE* FinishSignal;

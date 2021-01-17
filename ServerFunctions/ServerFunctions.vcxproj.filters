@@ -21,9 +21,6 @@
     <ClInclude Include="ClientInfoManagement.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ServerResponse.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ServerStructs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -33,9 +30,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="ClientInfoManagement.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ServerResponse.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

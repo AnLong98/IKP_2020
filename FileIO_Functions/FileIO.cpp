@@ -1,4 +1,3 @@
-#define _CRT_SECURE_NO_WARNINGS 1
 #include "../FileIO_Functions/FileIO.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,10 +9,10 @@ int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* 
 	_getcwd(path, 80);
 	printf("Current Directory = %s", path);
 
-	FILE* pFile;
-	pFile = fopen(fileName, "rb");
+	FILE* pFile = NULL;
+	errno_t status = fopen_s(&pFile, fileName, "rb");
 
-	if (pFile == NULL)
+	if (pFile == NULL || status != 0)
 	{
 		return -1;
 	}
@@ -39,10 +38,10 @@ int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* 
 
 int WriteFileIntoMemory(char* fileName, char* allocatedBufferPointer, size_t size)
 {
-	FILE* pFile;
-	pFile = fopen(fileName, "wb");
+	FILE* pFile = NULL;
+	errno_t status = fopen_s(&pFile, fileName, "wb");
 
-	if (pFile == NULL)
+	if (pFile == NULL || status != 0)
 	{
 		return -1;
 	}

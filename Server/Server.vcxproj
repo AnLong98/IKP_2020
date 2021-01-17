@@ -164,6 +164,9 @@
     <ProjectReference Include="..\PeerToPeerFileTransferFunctions\PeerToPeerFileTransferFunctions.vcxproj">
       <Project>{fa3640ae-e169-4c0f-991c-4077da2f3424}</Project>
     </ProjectReference>
+    <ProjectReference Include="..\ServerFunctions\ServerFunctions.vcxproj">
+      <Project>{5c6cd6c5-c829-413e-b1fe-466f2e990576}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

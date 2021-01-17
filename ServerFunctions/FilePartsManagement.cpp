@@ -1,15 +1,35 @@
 #include "../ServerFunctions/FilePartsManagement.h"
 #include "../DataStructures/HashMap.h"
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
+#define IP_BUFFER_SIZE 16
 
+CRITICAL_SECTION FileInfoAccess;
+int isInitFileManagementHandle = 0;
 
-int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_DATA>* fileInfoMap, CRITICAL_SECTION* fileDataAccess )
+void InitFileManagementHandle()
 {
+	InitializeCriticalSection(&FileInfoAccess);
+	isInitFileManagementHandle = 1;
+}
+
+void DeleteFileManagementHandle()
+{
+	DeleteCriticalSection(&FileInfoAccess);
+	isInitFileManagementHandle = 0;
+}
+
+
+int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_DATA>* fileInfoMap)
+{
+	
+	if (!isInitFileManagementHandle)
+		return -2;
+
 	int partAssigned = 0;
 	FILE_DATA fileData;
 
 	fileInfoMap->Get(fileName, &fileData);
-	EnterCriticalSection(fileDataAccess);
+	EnterCriticalSection(&FileInfoAccess);
 	if (fileData.partArraySize == fileData.partsOnClients)//Parts array is full and should be increased
 	{
 		fileData.filePartDataArray = (FILE_PART*)realloc(fileData.filePartDataArray, fileData.partArraySize + FILE_PARTS); //Increase array by the count of file parts
@@ -17,24 +37,21 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 	}
 	if (fileData.filePartDataArray == NULL)
 	{
-		//ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
-		LeaveCriticalSection(fileDataAccess);
-		printf("\nReleased finish");
+		LeaveCriticalSection(&FileInfoAccess);
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
 	fileData.partsOnClients++;																					//Increase number of parts owned by clients
-	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;
-	LeaveCriticalSection(fileDataAccess);
+	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
+	fileInfoMap->Insert(fileName, fileData);
+	LeaveCriticalSection(&FileInfoAccess);
 	
 	FILE_PART filePartToAssign = fileData.filePartDataArray[fileData.nextPartToAssign];							//Get data from first 10 assigned file parts
 	fileData.filePartDataArray[fileData.partsOnClients].clientOwnerAddress = clientInfo;						//Assign new client's connection info
 	fileData.filePartDataArray[fileData.partsOnClients].isServerOnly = 0;										//Mark as client owned
 	fileData.filePartDataArray[fileData.partsOnClients].partSize = filePartToAssign.partSize;					//Copy part size
 	fileData.filePartDataArray[fileData.partsOnClients].partStartPointer = filePartToAssign.partStartPointer;	//Copy buffer pointer
-	fileData.filePartDataArray[fileData.partsOnClients].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number
-	//fileData.partsOnClients++;																					//Increase number of parts owned by clients
-	//fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
+	fileData.filePartDataArray[fileData.partsOnClients].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number							
 	memcpy(fileData.fileName, fileName, strlen(fileName));														//Copy file name
 	
 	fileInfoMap->Insert(fileName,fileData);																			//Save changes
@@ -45,6 +62,9 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 
 int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int parts, FILE_PART** unallocatedPartsArray)
 {
+	if (!isInitFileManagementHandle)
+		return -2;
+
 	size_t partSize = fileSize / parts;
 	size_t totalSizeAccounted = 0;
 
@@ -52,12 +72,10 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 
 	if (*unallocatedPartsArray == NULL)
 	{
-		//ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
-		printf("\nReleased finish");
 		return -1;
 	}
 	int partNumber = 0;
-	for (int i = 0; i < parts; i++)
+	for (int i = 0; i < (int)parts; i++)
 	{
 		if (i == parts - 1)
 		{
@@ -73,7 +91,7 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 		totalSizeAccounted += partSize;
 	}
 
-	for (int i = parts; i < 2 * parts; i++)
+	for (int i = parts; i < 2 * (int)parts; i++)
 	{
 		(*unallocatedPartsArray)[i].isServerOnly = 1;
 	}
@@ -82,67 +100,121 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 }
 
 
-int UnassignFilePart(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_DATA>* fileInfoMap, CRITICAL_SECTION* fileDataAccess)
+int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, FILE_DATA* fileDataArray, unsigned int filePartsCount)
 {
-	PWSTR ipBuffer[16];
+	if (!isInitFileManagementHandle)
+		return -2;
+
+	char filePartIpBuffer[IP_BUFFER_SIZE];
+	char clientIpBuffer[IP_BUFFER_SIZE];
 	int clientPartIndex = -1;
-	FILE_DATA fileData;
-	fileInfoMap->Get(fileName, &fileData);
-	//Find index of user assigned part
-	for (int i = 0; i < fileData.partsOnClients; i++)
+
+	
+	for (int i = 0; i < (int)filePartsCount; i++)//Iterate through all client owned files file data and unassign client's part from part's array
 	{
-		if (fileData.filePartDataArray[i].isServerOnly)continue; //Skip server owned parts
-		unsigned short filePartPort = fileData.filePartDataArray[i].clientOwnerAddress.sin_port;
-		InetNtop(AF_INET, &(fileData.filePartDataArray[i].clientOwnerAddress.sin_addr), *ipBuffer, 16);
-		char *filePartIp = inet_ntoa(fileData.filePartDataArray[i].clientOwnerAddress.sin_addr);
-		if (filePartPort == clientInfo.sin_port && strcmp(filePartIp, inet_ntoa(clientInfo.sin_addr)) == 0)
+		EnterCriticalSection(&FileInfoAccess);
+		FILE_DATA fileData;
+		if (!fileInfoMap->Get(fileDataArray[i].fileName, &fileData))//Something is badly wrong here, clien't data should be in this array
 		{
-			clientPartIndex = i;
-			break;
+			return -1;
 		}
-	}
-	EnterCriticalSection(fileDataAccess);
-	int filePartToShift = fileData.filePartDataArray[clientPartIndex].filePartNumber;
-	if (clientPartIndex == -1)
-	{
-		LeaveCriticalSection(fileDataAccess);
-		return -1;
-	}
 
-
-	int isShifted = 0;
-	//Check if any other user has this file part and put his data here
-	for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
-	{
-		if (fileData.filePartDataArray[i].isServerOnly)continue;
-		if (fileData.filePartDataArray[i].filePartNumber == filePartToShift)
+		//Find index of user assigned part
+		for (int i = 0; i < (int)fileData.partsOnClients; i++)
 		{
-			fileData.filePartDataArray[clientPartIndex].clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
-			clientPartIndex = i;
-			isShifted = 1;
-
+			if (fileData.filePartDataArray[i].isServerOnly)continue; //Skip server owned parts
+			unsigned short filePartPort = fileData.filePartDataArray[i].clientOwnerAddress.sin_port;
+			InetNtop(AF_INET, &(fileData.filePartDataArray[i].clientOwnerAddress.sin_addr), (PWSTR)filePartIpBuffer, IP_BUFFER_SIZE);
+			InetNtop(AF_INET, &(clientInfo.sin_addr), (PWSTR)clientIpBuffer, IP_BUFFER_SIZE);
+			if (filePartPort == clientInfo.sin_port && strcmp(filePartIpBuffer, clientIpBuffer) == 0)
+			{
+				clientPartIndex = i;
+				break;
+			}
 		}
-	}
 
-	if (!isShifted)
-	{
-		fileData.filePartDataArray[filePartToShift].isServerOnly = 1;
-	}
-
-	//Shift back only if client's part is not among first 10 parts
-	if (clientPartIndex >= FILE_PARTS)
-	{
-		//Shift remaining file parts back one place to fill the gap
-		for (int i = clientPartIndex + 1; i < fileData.partsOnClients; i++)
+		int filePartToShift = fileData.filePartDataArray[clientPartIndex].filePartNumber;
+		if (clientPartIndex == -1)
 		{
-			fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
+			LeaveCriticalSection(&FileInfoAccess);
+			return -1;
 		}
+
+
+		int isShifted = 0;
+		//Check if any other user has this file part and put his data here
+		for (int i = clientPartIndex + 1; i < (int)fileData.partsOnClients; i++)
+		{
+			if (fileData.filePartDataArray[i].isServerOnly)continue;
+			if (fileData.filePartDataArray[i].filePartNumber == filePartToShift)
+			{
+				fileData.filePartDataArray[clientPartIndex].clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
+				clientPartIndex = i;
+				isShifted = 1;
+
+			}
+		}
+
+		if (!isShifted)
+		{
+			fileData.filePartDataArray[filePartToShift].isServerOnly = 1;
+		}
+
+		//Shift back only if client's part is not among first 10 parts
+		if (clientPartIndex >= FILE_PARTS)
+		{
+			//Shift remaining file parts back one place to fill the gap
+			for (int i = clientPartIndex + 1; i < (int)fileData.partsOnClients; i++)
+			{
+				fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
+			}
+		}
+
+		fileData.partsOnClients--; //There is one less client owned part now.
+		LeaveCriticalSection(&FileInfoAccess);
+
+		fileInfoMap->Insert(fileDataArray[i].fileName, fileData);
 	}
-
-	fileData.partsOnClients--; //There is one less client owned part now.
-	LeaveCriticalSection(fileDataAccess);
-
-	fileInfoMap->Insert(fileName, fileData);
 	
 	return 0;
+}
+
+
+int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap)
+{
+	int serverOwnedPartsCount = 0;
+	int clientOwnedPartsCount = 0;
+
+	for (int i = 0; i < FILE_PARTS; i++)
+	{
+		if (fileData.filePartDataArray[i].isServerOnly)
+		{
+			serverOwnedParts[serverOwnedPartsCount++] = i;
+		}
+		else
+		{
+			FILE_PART_INFO partInfo;
+			partInfo.partNumber = fileData.filePartDataArray[i].filePartNumber;
+			partInfo.clientOwnerAddress = fileData.filePartDataArray[i].clientOwnerAddress;
+			response->clientParts[clientOwnedPartsCount++] = partInfo;
+		}
+
+	}
+	response->fileExists = 1;
+	response->clientPartsNumber = clientOwnedPartsCount;
+	response->serverPartsNumber = serverOwnedPartsCount;
+	response->fileSize = fileData.fileSize;
+
+	int assignedPart = AssignFilePartToClient(request.requesterListenAddress, request.fileName, fileInfoMap);
+	if (assignedPart == -1)
+	{
+		return -1;
+	}
+	else
+	{
+		response->filePartToStore = assignedPart;
+	}
+
+	return 0;
+
 }

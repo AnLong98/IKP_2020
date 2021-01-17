@@ -1,4 +1,8 @@
 #pragma once
+
+#ifndef CONNECTIONFUNCS_H
+#define CONNECTIONFUNCS_H
+
 #include <WinSock2.h>
 #include "../DataStructures/Queue.h"
 #include "../DataStructures/HashMap.h"
@@ -44,3 +48,5 @@ int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeInd
 */
 // THREAD UNSAFE
 int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds, Queue<SOCKET*>* communicationQueue, HashMap<SOCKET*>* processingSocketsMap);
+
+#endif
