@@ -214,7 +214,10 @@ int  main(void)
 			int setSocketsCount = CheckSetSockets(&socketsTaken, acceptedSockets, &readfds, &incomingRequestsQueue, &processingSocketsMap);
 			LeaveCriticalSection(&AcceptedSocketsAccess);
 			if (setSocketsCount > 0)
+			{
+				printf("\n%d requests arrived.", setSocketsCount);
 				ReleaseSemaphore(FullQueue, setSocketsCount, NULL);
+			}
 			
 
 		}
@@ -241,6 +244,7 @@ int  main(void)
 	DeleteClientInfoHandle();
 	DeleteFileManagementHandle();
 
+	getchar();
 	return 0;
 }
 
@@ -275,6 +279,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int getResult = incomingRequestsQueue->DequeueGet(&requestSocket);  //Get request from queue
 		if (getResult == 0)
 			continue;
+		printf("\nDequeued request from queue");
 
 		FILE_DATA fileData;
 		FILE_PART* fileParts = NULL;
@@ -288,16 +293,20 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		if (result == -1)
 		{
 
-			printf("\nDiskonektovao se %d", requestSocket - acceptedSockets);
+			printf("\nClient %d has disconnected" , requestSocket - acceptedSockets);
 			CLIENT_INFO info;
 			if (clientInfoMap->Get((const char*)requestSocket, &info))
-				UnassignFileParts(fileRequest.requesterListenAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+			{
+				printf("\nUnassigning client owned parts");
+				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+			}
 			RemoveClientInfo(requestSocket, clientInfoMap);
 			EnterCriticalSection(AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
-			RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 			processingSocketsMap->Delete((const char*)(requestSocket));
+			RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 			LeaveCriticalSection(AcceptedSocketsAccess);
+			printf("\nRemoved client!");
 			continue;
 			
 		}
@@ -310,6 +319,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 		if (isFileLoaded)//File is loaded and can be given back to client
 		{
+			printf("File %s is already loaded in memory.", fileRequest.fileName);
 			fileInfoMap->Get(fileRequest.fileName, &fileData);
 			PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts, fileInfoMap);
 			fileParts = fileData.filePartDataArray;
@@ -324,6 +334,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 			if (result != 0)//File probably doesn't exist on server
 			{
+				printf("\nFile %s doesn't exist on server", fileRequest.fileName);
 				fileResponse.fileExists = 0;
 				fileResponse.clientPartsNumber = 0;
 				fileResponse.filePartToStore = 0;
@@ -333,6 +344,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			}
 			else //File is on server and loaded into buffer
 			{
+				printf("\nFile %s is now loaded into buffer", fileRequest.fileName);
 				DivideFileIntoParts(fileBuffer, fileSize, FILE_PARTS, &fileParts);
 				fileResponse.fileExists = 1;
 				fileResponse.clientPartsNumber = 0;
@@ -360,11 +372,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 		if (SendFileResponse(*requestSocket, fileResponse) != 0)
 		{
+			printf("\nClient %d has disconnected", requestSocket - acceptedSockets);
+			CLIENT_INFO info;
+			if (clientInfoMap->Get((const char*)requestSocket, &info))
+			{
+				printf("\nUnassigning client owned parts");
+				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+			}
 			RemoveClientInfo(requestSocket, clientInfoMap);
 			EnterCriticalSection(AcceptedSocketsAccess);
 			ShutdownConnection(requestSocket);
 			RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 			LeaveCriticalSection(AcceptedSocketsAccess);
+			printf("\nRemoved client!");
 			continue;
 		}
 
@@ -378,12 +398,16 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				printf("\nFailed to send part number %d. Shutting down connection to client. Error %ld", i, WSAGetLastError());
 				CLIENT_INFO info;
 				if (clientInfoMap->Get((const char*)requestSocket, &info))
-					UnassignFileParts(fileRequest.requesterListenAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+				{
+					printf("\nUnassigning client owned parts");
+					UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+				}
 				RemoveClientInfo(requestSocket, clientInfoMap);
 				EnterCriticalSection(AcceptedSocketsAccess);
 				ShutdownConnection(requestSocket);
 				RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 				LeaveCriticalSection(AcceptedSocketsAccess);
+				printf("\nRemoved client!");
 				sockERR = 1;
 				break;
 			}
@@ -397,7 +421,9 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		}
 		if(isAssignedWithPart != -1)
 			AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress, clientInfoMap);
+		printf("\nThread loop finished");
 	}
+	printf("\nThread finished.");
 	return 0;
 }
 

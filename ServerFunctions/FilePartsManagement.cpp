@@ -41,17 +41,17 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
-	fileData.partsOnClients++;																					//Increase number of parts owned by clients
+	int clientFilePartIndex = fileData.partsOnClients++;														//Increase number of parts owned by clients
 	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
 	fileInfoMap->Insert(fileName, fileData);
 	LeaveCriticalSection(&FileInfoAccess);
 	
-	FILE_PART filePartToAssign = fileData.filePartDataArray[fileData.nextPartToAssign];							//Get data from first 10 assigned file parts
-	fileData.filePartDataArray[fileData.partsOnClients].clientOwnerAddress = clientInfo;						//Assign new client's connection info
-	fileData.filePartDataArray[fileData.partsOnClients].isServerOnly = 0;										//Mark as client owned
-	fileData.filePartDataArray[fileData.partsOnClients].partSize = filePartToAssign.partSize;					//Copy part size
-	fileData.filePartDataArray[fileData.partsOnClients].partStartPointer = filePartToAssign.partStartPointer;	//Copy buffer pointer
-	fileData.filePartDataArray[fileData.partsOnClients].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number							
+	FILE_PART filePartToAssign = fileData.filePartDataArray[partAssigned];							//Get data from first 10 assigned file parts
+	fileData.filePartDataArray[clientFilePartIndex].clientOwnerAddress = clientInfo;						//Assign new client's connection info
+	fileData.filePartDataArray[clientFilePartIndex].isServerOnly = 0;										//Mark as client owned
+	fileData.filePartDataArray[clientFilePartIndex].partSize = filePartToAssign.partSize;					//Copy part size
+	fileData.filePartDataArray[clientFilePartIndex].partStartPointer = filePartToAssign.partStartPointer;	//Copy buffer pointer
+	fileData.filePartDataArray[clientFilePartIndex].filePartNumber = filePartToAssign.filePartNumber;		//Copy part number							
 	memcpy(fileData.fileName, fileName, strlen(fileName));														//Copy file name
 	
 	fileInfoMap->Insert(fileName,fileData);																			//Save changes
@@ -99,14 +99,14 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 	return 0;
 }
 
-
+/*Ne radi kako treba!!*/
 int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, FILE_DATA* fileDataArray, unsigned int filePartsCount)
 {
 	if (!isInitFileManagementHandle)
 		return -2;
 
-	char filePartIpBuffer[IP_BUFFER_SIZE];
-	char clientIpBuffer[IP_BUFFER_SIZE];
+	wchar_t filePartIpBuffer[IP_BUFFER_SIZE];
+	wchar_t clientIpBuffer[IP_BUFFER_SIZE];
 	int clientPartIndex = -1;
 
 	
@@ -126,7 +126,7 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, F
 			unsigned short filePartPort = fileData.filePartDataArray[i].clientOwnerAddress.sin_port;
 			InetNtop(AF_INET, &(fileData.filePartDataArray[i].clientOwnerAddress.sin_addr), (PWSTR)filePartIpBuffer, IP_BUFFER_SIZE);
 			InetNtop(AF_INET, &(clientInfo.sin_addr), (PWSTR)clientIpBuffer, IP_BUFFER_SIZE);
-			if (filePartPort == clientInfo.sin_port && strcmp(filePartIpBuffer, clientIpBuffer) == 0)
+			if (filePartPort == clientInfo.sin_port && wcscmp(filePartIpBuffer, clientIpBuffer) == 0)
 			{
 				clientPartIndex = i;
 				break;

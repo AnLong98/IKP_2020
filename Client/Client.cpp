@@ -290,6 +290,7 @@ int main()
 	closesocket(listenSocket);
 	WSACleanup();
 
+	getchar();
 	return 0;
 }
 
@@ -396,6 +397,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 			// ulazim u kriticnu sekciju, zakljucavam outReqQueue i stavljam info u njega
 			EnterCriticalSection(&OutQueueAccess);
 			memcpy(clientFilePart.fileName, file.fileName, MAX_FILE_NAME);
+			printf("Klijent sa portom %u ima deo %d", response.clientParts[i].clientOwnerAddress.sin_port, response.clientParts[i].partNumber);
 			clientFilePart.filePartInfo.clientOwnerAddress = response.clientParts[i].clientOwnerAddress;
 			clientFilePart.filePartInfo.partNumber = response.clientParts[i].partNumber;
 			outgoingRequestQueue.push(clientFilePart);

@@ -57,10 +57,10 @@ int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformati
 	if (!isInitClientInfoHandle)
 		return -2;
 
-	if (clientInformationsMap->DoesKeyExist((const char*)(socket))) //Client is already in info map
+	if (clientInformationsMap->DoesKeyExist((const char*)(clientSocket))) //Client is already in info map
 	{
 		CLIENT_INFO info;
-		clientInformationsMap->Get((const char*)(socket), &info);
+		clientInformationsMap->Get((const char*)(clientSocket), &info);
 
 		free(info.clientOwnedFiles);
 		clientInformationsMap->Delete((const char*)(clientSocket));
@@ -72,12 +72,3 @@ int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformati
 	}
 
 }
-
-/*  Move this to file part management
-for (int i = 0; i < info.ownedFilesCount; i++)
-{
-
-	UnassignFilePart(info.clientAddress, info.clientOwnedFiles[i].fileName);
-
-}
-*/
