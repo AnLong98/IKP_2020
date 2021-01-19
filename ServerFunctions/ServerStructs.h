@@ -57,4 +57,5 @@ typedef struct SERVER_THREAD_DATA
 	HANDLE* FullQueue;
 	CRITICAL_SECTION* AcceptedSocketsAccess;
 	int* socketsTaken;
+	int* serverWorking;
 }S_DATA;

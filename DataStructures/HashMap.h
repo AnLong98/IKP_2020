@@ -43,6 +43,8 @@ public:
 	void Delete(const char* key);								//Method for deleting a value in hash map, returns false if not found
 	bool Get(const char* key, T* value);						//Method for getting value by key, value is stored in value pointer, returns false if key doesn't exist
 	bool DoesKeyExist(const char* key);						//Checks if key exists in hash map
+	unsigned int Size();
+	char** GetKeys(int* keyCount);							//Returns all keys from hash map, stores number of keys in keyCount, returns NULL if empty
 };
 
 template <class T>
@@ -113,6 +115,52 @@ long long HashMap<T>::GetHash(const char* key)
 	}
 	return hashVal;
 }
+
+// Function for getting hash map size
+template <class T>
+unsigned int HashMap<T>::Size()
+{
+	return size;
+}
+
+// Function for getting keys from hash map
+template <class T>
+char** HashMap<T>::GetKeys(int* keysCount)
+{
+	EnterCriticalSection(&MapCS);
+	char** keys =(char**) malloc(size * sizeof(char*));
+	int keysFound = 0;
+
+	for (int i = 0; i < (int)size; i++)
+	{
+		if (nodes[i].key == nullptr)continue;
+		keys[keysFound] = (char*)malloc(strlen(nodes[i].key) + 1);
+		strcpy_s(keys[keysFound], strlen(nodes[i].key) + 1, nodes[i].key);
+		keysFound++;
+		HashMapNode<T>* node = (nodes + i)->next;
+		while (node != nullptr)
+		{
+			keys[keysFound] = (char*)malloc(strlen(node->key) + 1);
+			strcpy_s(keys[keysFound], strlen(node->key) + 1, node->key);
+			keysFound++;
+
+			node = node->next;
+		}
+	}
+
+	if (keysFound == 0)
+	{
+		free(keys);
+		*keysCount = 0;
+		return NULL;
+	}
+	else
+	{
+		*keysCount = keysFound;
+		return keys;
+	}
+}
+
 
 //Function for checking if key exists in hash map
 template <class T>
@@ -282,8 +330,11 @@ void HashMap<T>::Delete(const char* key)
 	{
 		if (strcmp(nodeNext->key, key) == 0)
 		{
+			
 			node->next = nodeNext->next;
 			nodeNext->next = nullptr;
+			free(nodeNext->key);
+			nodeNext->key = nullptr;
 			delete nodeNext;
 			countUnique--;
 			LeaveCriticalSection(&MapCS);

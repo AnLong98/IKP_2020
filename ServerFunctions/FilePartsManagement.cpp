@@ -43,7 +43,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 	partAssigned = fileData.nextPartToAssign;
 	int clientFilePartIndex = fileData.nextPartToAssign;
 
-	while (clientFilePartIndex < fileData.partArraySize)
+	while (clientFilePartIndex < (int)fileData.partArraySize)
 	{
 		if (fileData.filePartDataArray[clientFilePartIndex].isServerOnly)
 		{
@@ -106,7 +106,7 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 	return 0;
 }
 
-/*Ne radi kako treba!!*/
+
 int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, FILE_DATA* fileDataArray, unsigned int filePartsCount)
 {
 	if (!isInitFileManagementHandle)
@@ -224,4 +224,26 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 
 	return 0;
 
+}
+
+int ClearFileInfoMap(HashMap<FILE_DATA>* fileInfoMap)
+{
+	int keysCount = 0;
+	char** keys = fileInfoMap->GetKeys(&keysCount);
+
+	if (keysCount == 0)
+		return 0;
+
+	for (int i = 0; i < keysCount; i++)
+	{
+		FILE_DATA fileData;
+		fileInfoMap->Get(keys[i], &fileData);
+		free(fileData.filePartDataArray);
+		free(fileData.filePointer);
+		fileInfoMap->Delete(keys[i]);
+		free(keys[i]);
+	}
+
+	free(keys);
+	return 0;
 }

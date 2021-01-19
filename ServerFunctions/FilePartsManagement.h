@@ -50,7 +50,7 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 	fileDataArray - Array of client owned file data.
 	filePartsCount - Number of client owned parts.
 
-	Returns assigned file part number -1 if out of memory and -2 if library handle not initialized.
+	Returns 0 if OK, -1 if out of memory and -2 if library handle not initialized.
 
 	THREAD SAFE
 */
@@ -71,3 +71,14 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, F
 
 */
 int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap);
+
+/*
+	Unloads all loaded files from memory and unassigns all asigned file parts.
+	
+	fileInfoMap - Hash map of file info 
+	
+	Returns 0;
+
+	THREAD UNSAFE
+*/
+int ClearFileInfoMap(HashMap<FILE_DATA>* fileInfoMap);

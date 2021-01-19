@@ -72,3 +72,23 @@ int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformati
 	}
 
 }
+
+int ClearClientInfoMap(HashMap<CLIENT_INFO>* clientInformationsMap)
+{
+	int keysCount = 0;
+	char** keys = clientInformationsMap->GetKeys(&keysCount);
+
+	if (keysCount == 0)
+		return 0;
+
+	for (int i = 0; i < keysCount; i++)
+	{
+		CLIENT_INFO info;
+		clientInformationsMap->Get(keys[i], &info);
+		free(info.clientOwnedFiles);
+		free(keys[i]);
+	}
+
+	free(keys);
+	return 0;
+}

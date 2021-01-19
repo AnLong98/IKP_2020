@@ -37,3 +37,14 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, Has
 	THREAD SAFE
 */
 int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformationsMap);
+
+/*
+	Removes all client info
+	clientInformationsMap - Hash map of client informations\
+
+	Returns 0
+
+	THREAD UNSAFE
+
+*/
+int ClearClientInfoMap(HashMap<CLIENT_INFO>* clientInformationsMap);
