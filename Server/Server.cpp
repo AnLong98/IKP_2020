@@ -173,9 +173,11 @@ int  main(void)
 		}
 
 		printf("Server initialized, waiting for clients.\n");
-
+		//int i = 0;
 		while (serverWorking)
 		{
+			//if (i == 5)
+			//	break;
 			FD_ZERO(&readfds);
 			FD_SET(listenSocket, &readfds);
 
@@ -196,17 +198,18 @@ int  main(void)
 			}
 			else if (result == SOCKET_ERROR) {
 
-				//TODO: Handle this error, check which socket cause error and see if it is in sockets to close list
+				EnterCriticalSection(&AcceptedSocketsAccess);
+				DisconnectBrokenSockets(acceptedSockets, &socketsTaken);
+				LeaveCriticalSection(&AcceptedSocketsAccess);
 
-
-				printf("Errorcina je %d ", WSAGetLastError());
-				break;
+				continue;	
 			}
 			else {
 				if (FD_ISSET(listenSocket, &readfds) && socketsTaken < MAX_CLIENTS)
 				{
 					EnterCriticalSection(&AcceptedSocketsAccess);
 					AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket);
+					//i++;
 					printf("Primio konekciju na %d", socketsTaken - 1);
 					LeaveCriticalSection(&AcceptedSocketsAccess);
 				}
@@ -306,22 +309,18 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			if (clientInfoMap->Get((const char*)requestSocket, &info))
 			{
 				printf("\nUnassigning client owned parts");
-				if (UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount) != 0)
-				{
-					ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
-					*serverWorking = 0;
-					continue;
-				}
+				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
 			}
-			result = RemoveClientInfo(requestSocket, clientInfoMap);
+			RemoveClientInfo(requestSocket, clientInfoMap);
 			EnterCriticalSection(AcceptedSocketsAccess);
-			result += ShutdownConnection(requestSocket);
+			result = ShutdownConnection(requestSocket);
 			processingSocketsMap->Delete((const char*)(requestSocket));
 			result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 			LeaveCriticalSection(AcceptedSocketsAccess);
 			if (result != 0) //Shutdown everything in case something went terribly wrong
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+				printf("\nRemove client failed failed");
 				*serverWorking = 0;
 			}
 			printf("\nRemoved client!");
@@ -343,6 +342,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			if (result != 0) //Shutdown everything in case something went terribly wrong
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+				printf("\nPack existing response failed");
 				*serverWorking = 0;
 				continue;
 			}
@@ -373,6 +373,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				if (resultOp != 0) //Shutdown everything in case something went terribly wrong
 				{
 					ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+					printf("\nDivide file parts failed");
 					*serverWorking = 0;
 					continue;
 				}
@@ -406,22 +407,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			CLIENT_INFO info;
 			if (clientInfoMap->Get((const char*)requestSocket, &info))
 			{
-				printf("\nUnassigning client owned parts");
-				if (UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount) != 0)
-				{
-					ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
-					*serverWorking = 0;
-					continue;
-				}
+				printf("\nUnassigning client owned parts as response failed");
+				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+
 			}
-			result = RemoveClientInfo(requestSocket, clientInfoMap);
+			RemoveClientInfo(requestSocket, clientInfoMap);
 			EnterCriticalSection(AcceptedSocketsAccess);
-			result += ShutdownConnection(requestSocket);
+			result = ShutdownConnection(requestSocket);
 			result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 			LeaveCriticalSection(AcceptedSocketsAccess);
 			if (result != 0) //Shutdown everything in case something went terribly wrong
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+				printf("\nRemove client failed");
 				*serverWorking = 0;
 			}
 			printf("\nRemoved client!");
@@ -439,22 +437,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				CLIENT_INFO info;
 				if (clientInfoMap->Get((const char*)requestSocket, &info))
 				{
-					printf("\nUnassigning client owned parts");
-					if (UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount) != 0)
-					{
-						ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
-						*serverWorking = 0;
-						continue;
-					}
+					printf("\nUnassigning client owned parts as send part failed");
+					UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
+
 				}
-				result = RemoveClientInfo(requestSocket, clientInfoMap);
+				RemoveClientInfo(requestSocket, clientInfoMap);
 				EnterCriticalSection(AcceptedSocketsAccess);
-				result += ShutdownConnection(requestSocket);
+				result = ShutdownConnection(requestSocket);
 				result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
 				LeaveCriticalSection(AcceptedSocketsAccess);
 				if (result != 0) //Shutdown everything in case something went terribly wrong
 				{
 					ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+					printf("\nClient remove failed");
 					*serverWorking = 0;
 				}
 				printf("\nRemoved client!");
@@ -470,18 +465,23 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 			if (AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName, fileInfoMap) < 0)
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+				printf("\nAssign file part failed");
 				*serverWorking = 0;
 				continue;
 			}
 		}
+
 		if (isAssignedWithPart != -1)
 		{
-			if (AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress, clientInfoMap))
+			if(AddClientInfo(requestSocket, fileData, fileRequest.requesterListenAddress, clientInfoMap) != 0)
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
+				printf("\nAdd client info failed");
 				*serverWorking = 0;
+				continue;
 			}
 		}
+	
 	}
 	printf("\nThread finished.");
 

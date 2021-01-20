@@ -121,7 +121,7 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, F
 	{
 		EnterCriticalSection(&FileInfoAccess);
 		FILE_DATA fileData;
-		if (!fileInfoMap->Get(fileDataArray[i].fileName, &fileData))//Something is badly wrong here, clien't data should be in this array
+		if (!fileInfoMap->Get(fileDataArray[i].fileName, &fileData))//Client does not have any file parts
 		{
 			return -1;
 		}

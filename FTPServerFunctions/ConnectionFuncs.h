@@ -49,4 +49,28 @@ int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeInd
 // THREAD UNSAFE
 int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds, Queue<SOCKET*>* communicationQueue, HashMap<SOCKET*>* processingSocketsMap);
 
+/*
+	Disconnects socket's that are broken (if any), shuts them down and removes them from array of sockets. Should be called if select() returns SOCKET_ERROR
+
+	sockets - Sockets array
+	socketsCount - number of sockets in array
+
+	Returns number of disconnected sockets
+
+	THREAD UNSAFE
+*/
+int DisconnectBrokenSockets(SOCKET sockets[], int* socketsCount);
+
+/*
+	Checks if socket and underlaying connection is broken.
+
+	s - Socket to be checked
+
+	Returns 1 if broken, 0 if not broken
+
+	THREAD UNSAFE
+*/
+int IsSocketBroken(SOCKET s);
+
+
 #endif

@@ -73,3 +73,35 @@ int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds
 
 	return setSocketsCount;
 }
+
+int DisconnectBrokenSockets(SOCKET sockets[], int* socketsCount)
+{
+
+	int brokenSockets = 0;
+	for (int i = 0; i < *socketsCount; i++)
+	{
+		if (IsSocketBroken(sockets[i]))
+		{
+			ShutdownConnection(sockets + i);
+			RemoveSocketFromArray(sockets, sockets + i, socketsCount);
+			brokenSockets++;
+		}
+	}
+
+	return brokenSockets;
+}
+
+
+int IsSocketBroken(SOCKET s)
+{
+	char buf;
+	int err = recv(s, &buf, 1, MSG_PEEK);
+	if (err == SOCKET_ERROR)
+	{
+		if (WSAGetLastError() != WSAEWOULDBLOCK)
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
