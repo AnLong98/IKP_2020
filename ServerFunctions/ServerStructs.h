@@ -49,6 +49,7 @@ typedef struct CLIENT_INFO
 typedef struct SERVER_THREAD_DATA
 {
 	HashMap<SOCKET*> * processingSocketsMap;
+	HashMap<int>* loadingFilesMap;
 	HashMap<FILE_DATA> * fileInfoMap;
 	Queue<SOCKET*> * incomingRequestsQueue;
 	HashMap<CLIENT_INFO>* clientInformationsMap;
@@ -56,6 +57,7 @@ typedef struct SERVER_THREAD_DATA
 	HANDLE* FinishSignal;
 	HANDLE* FullQueue;
 	CRITICAL_SECTION* AcceptedSocketsAccess;
+	CRITICAL_SECTION* LoadingFilesAccess;
 	int* socketsTaken;
 	int* serverWorking;
 }S_DATA;

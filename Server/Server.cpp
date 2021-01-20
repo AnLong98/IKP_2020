@@ -28,12 +28,14 @@ int  main(void)
 		//Server data structures
 		HashMap<SOCKET*> processingSocketsMap;
 		HashMap<FILE_DATA> fileInfoMap;
+		HashMap<int> loadingFilesMap;					//Hash map that stores names of file that are being loaded by server threads, used to avoid double loads
 		Queue<SOCKET*> incomingRequestsQueue;
 		HashMap<CLIENT_INFO> clientInformationsMap;
 		SOCKET acceptedSockets[MAX_CLIENTS];
 		HANDLE FinishSignal;							  // Semaphore to signalize threads to abort.
 		HANDLE FullQueue;								  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
 		CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
+		CRITICAL_SECTION LoadingFilesAccess;			  // Critical section for access to loading files structs
 		int socketsTaken = 0;
 		int serverWorking = 1;
 
@@ -48,7 +50,9 @@ int  main(void)
 		threadData.processingSocketsMap = &processingSocketsMap;
 		threadData.socketsTaken = &socketsTaken;
 		threadData.AcceptedSocketsAccess = &AcceptedSocketsAccess;
+		threadData.LoadingFilesAccess = &LoadingFilesAccess;
 		threadData.serverWorking = &serverWorking;
+		threadData.loadingFilesMap = &loadingFilesMap;
 
 		// Socket used for listening for new clients 
 		SOCKET listenSocket = INVALID_SOCKET;
@@ -72,6 +76,7 @@ int  main(void)
 		if (FullQueue && FinishSignal)
 		{
 			InitializeCriticalSection(&AcceptedSocketsAccess);
+			InitializeCriticalSection(&LoadingFilesAccess);
 
 			for (int i = 0; i < SERVER_THREADS; i++)
 				processors[i] = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)&threadData, 0, processorIDs + i);
@@ -89,6 +94,7 @@ int  main(void)
 					SAFE_DELETE_HANDLE(FinishSignal);
 
 					DeleteCriticalSection(&AcceptedSocketsAccess);
+					DeleteCriticalSection(&LoadingFilesAccess);
 					return 0;
 				}
 			}
@@ -236,6 +242,7 @@ int  main(void)
 		SAFE_DELETE_HANDLE(FinishSignal);
 
 		DeleteCriticalSection(&AcceptedSocketsAccess);
+		DeleteCriticalSection(&LoadingFilesAccess);
 
 		for (int i = 0; i < socketsTaken; i++)
 		{
@@ -280,6 +287,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	HashMap<SOCKET*>* processingSocketsMap = threadData.processingSocketsMap;
 	HashMap<FILE_DATA>* fileInfoMap = threadData.fileInfoMap;
 	HashMap<CLIENT_INFO>* clientInfoMap = threadData.clientInformationsMap;
+	HashMap<int>* loadingFilesMap = threadData.loadingFilesMap;
 	int* socketsTaken = threadData.socketsTaken;
 	int* serverWorking = threadData.serverWorking;
 
@@ -328,12 +336,27 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 		}
 
+		
+
 		//Remove socket from processing map
 		processingSocketsMap->Delete((const char*)(requestSocket));
 
+		EnterCriticalSection(threadData.LoadingFilesAccess);
+		int isBeingLoaded = loadingFilesMap->DoesKeyExist(fileRequest.fileName);
 		int isFileLoaded = fileInfoMap->DoesKeyExist(fileRequest.fileName);
-		//LeaveCriticalSection(&FileMapAccess);
-
+		if (!isBeingLoaded && !isFileLoaded) //We will load it if no one is doing it at the moment
+		{
+			loadingFilesMap->Insert(fileRequest.fileName, 1);
+		}
+		LeaveCriticalSection(threadData.LoadingFilesAccess);
+		while (isBeingLoaded) //We need to wait for other threads to load this file
+		{
+			if (!*serverWorking)return 0;
+			Sleep(1000);
+			isBeingLoaded = loadingFilesMap->DoesKeyExist(fileRequest.fileName);
+		}
+		
+		isFileLoaded = fileInfoMap->DoesKeyExist(fileRequest.fileName);
 		if (isFileLoaded)//File is loaded and can be given back to client
 		{
 			printf("File %s is already loaded in memory.", fileRequest.fileName);
@@ -358,6 +381,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 			if (result != 0)//File probably doesn't exist on server
 			{
+				loadingFilesMap->Delete(fileRequest.fileName); // Tell other threads that file is not being loaded anymore
 				printf("\nFile %s doesn't exist on server", fileRequest.fileName);
 				fileResponse.fileExists = 0;
 				fileResponse.clientPartsNumber = 0;
@@ -397,6 +421,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 				//Add new file data structure to map, no need for CS because no one owns this structure yet
 				fileInfoMap->Insert(fileRequest.fileName, fileData);
+				loadingFilesMap->Delete(fileRequest.fileName); // Tell other threads that file is loaded
 			}
 
 		}
