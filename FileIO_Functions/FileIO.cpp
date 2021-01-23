@@ -4,8 +4,6 @@
 
 int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* size)
 {
-	char path[80];
-
 	FILE* pFile = NULL;
 	errno_t status = fopen_s(&pFile, fileName, "rb");
 
@@ -19,6 +17,11 @@ int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* 
 	fseek(pFile, 0L, SEEK_SET);
 
 	*unallocatedBufferPointer = (char*)malloc((*size) * sizeof(char));
+	if (*unallocatedBufferPointer == NULL)
+	{
+		return -1;
+	}
+
 	size_t readBytes = fread(*unallocatedBufferPointer, 1 ,(*size) , pFile);
 
 	fclose(pFile);

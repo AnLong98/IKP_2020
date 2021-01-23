@@ -203,7 +203,7 @@ int  main(void)
 				FD_SET(sockets[i], &readfds);
 			}
 
-			if (socketsCount != 0)
+			if (sockets != NULL)
 				free(sockets);
 
 			timeval timeVal;
@@ -220,8 +220,8 @@ int  main(void)
 				//int disconnectedSockets = DisconnectBrokenSockets(&acceptedSockets);
 				//socketsTaken -= disconnectedSockets;
 				//printf("\nDisconnected %d sockets", disconnectedSockets);
-				printf("\nError detected on select, sleeping for 500ms to let worker threads handle");
-				Sleep(500);
+				printf("\nError detected on select, sleeping for 100ms to let worker threads handle");
+				Sleep(100);
 				continue;	
 			}
 			else {
@@ -270,7 +270,7 @@ int  main(void)
 			ShutdownConnection(sockets[i]);
 		}
 
-		if (socketsCount > 0)
+		if (sockets!= NULL)
 			free(sockets);
 		// cleanup
 		closesocket(listenSocket);

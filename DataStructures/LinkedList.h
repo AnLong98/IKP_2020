@@ -289,6 +289,8 @@ bool LinkedList<T>::RemoveElement(ListNode<T>* node)
 			{
 				head = nullptr;
 				rear = nullptr;
+				search->next = nullptr;
+				search->previous = nullptr;
 				delete search;
 				count--;
 				break;

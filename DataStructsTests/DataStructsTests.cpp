@@ -1,175 +1,196 @@
 #pragma comment(lib, "Ws2_32.lib")
-#define _CRT_SECURE_NO_WARNINGS 1
 #include "../DataStructures/HashMap.h"
 #include "../DataStructures/LinkedList.h"
 #include "../DataStructures/Queue.h"
+#include <conio.h>
+#define QUEUE_TEST_THREADS 20
+#define HASH_MAP_HARD_TEST 2
+#define HASH_MAP_FULL_TEST 4
+#define LIST_TEST_THREADS 50
+#define MAP_TEST_THREADS 50
+#define OPERATIONS_PER_THREAD 2000
 
 #include <iostream>
 #include <string>
 using namespace std;
 
-typedef struct SomeStruct {
-	int  number;
-	char someChar;
-}SS;
+DWORD WINAPI QueueTester(LPVOID params);
+DWORD WINAPI HashMapTester(LPVOID params);
+DWORD WINAPI ListTester(LPVOID params);
 
-void TestQueue()
-{
-	Queue<int> numbersQueue;
-
-	Queue<string> stringQueue(2);
-
-	stringQueue.Enqueue(string("meda"));
-	stringQueue.Enqueue(string("zekaa"));
-	stringQueue.Enqueue(string("peka"));
-	string front;
-	stringQueue.GetFront(&front);
-
-	cout << "Testing Enqueue more than size values, front expected 'meda', got " << front << endl;
-	cout << "Testing more than size queue size. Expected 2 got " << stringQueue.Size() << endl;
-
-	stringQueue.Dequeue();
-	stringQueue.Dequeue();
-	front = string("nothing");
-	stringQueue.GetFront(&front);
-	cout << "Testing Dequeue all, front expected 'nothing', got " << front << endl;
-}
-
-void TestHashMap()
-{
-	HashMap<SomeStruct> testMap;
-
-	cout << "Testing Hash map does key exist on non existing key. Expected 0 got " << testMap.DoesKeyExist("TestKey") << endl;
-	SomeStruct structic;
-	structic.number = 555333;
-	structic.someChar = 'k';
-
-	testMap.Insert("Somekey", structic);
-	cout << "Testing Hash map does key exist on  existing key. Expected 1 got " << testMap.DoesKeyExist("Somekey") << endl;
-
-	SomeStruct retStruct;
-	cout << "Testing get exisitng struct from hash map, expected 1 got " << testMap.Get("Somekey", &retStruct) << endl;
-	cout << "Testing get exisitng struct from hash map, expected 555333 got " << retStruct.number << endl;
-	cout << "Testing get exisitng struct from hash map, expected k got " << retStruct.someChar << endl;
-
-	testMap.Delete("somekey");
-	testMap.Delete("Somekey");
-	cout << "Testing Hash map does key exist on deleted key. Expected 0 got " << testMap.DoesKeyExist("Somekey") << endl;
-
-	HashMap<SomeStruct> testMapSmall(2);
-
-	testMapSmall.Insert("key", structic);
-	structic.number = 99899;
-	structic.someChar = 'p';
-	testMapSmall.Insert("key", structic);
-	testMapSmall.Get("key", &retStruct);
-	cout << "Testing get ovewritten struct from hash map, expected 99899 got " << retStruct.number << endl;
-	cout << "Testing get overwritten struct from hash map, expected p got " << retStruct.someChar << endl;
-
-
-	SomeStruct strkt;
-	strkt.number = 0;
-	strkt.someChar = 'a';
-	testMapSmall.Insert("key0", strkt);
-
-	strkt.number = 1;
-	strkt.someChar = 'b';
-	testMapSmall.Insert("key1", strkt);
-
-	strkt.number = 2;
-	strkt.someChar = 'c';
-	testMapSmall.Insert("key2", strkt);
-	
-	strkt.number = 3;
-	strkt.someChar = 'd';
-	testMapSmall.Insert("key3", strkt);
-
-	strkt.number = 4;
-	strkt.someChar = 'e';
-	testMapSmall.Insert("key4", strkt);
-
-	testMapSmall.Get("key4", &retStruct);
-	cout << "Testing get chained struct from hash map, expected 4 got " << retStruct.number << endl;
-	cout << "Testing get chained struct  from hash map, expected e got " << retStruct.someChar << endl;
-
-	testMapSmall.Delete("key");
-	cout << "Testing Hash map does key exist on deleted key. Expected 0 got " << testMap.DoesKeyExist("key") << endl;
-
-	testMapSmall.Delete("key4");
-	cout << "Testing Hash map does key exist on deleted key. Expected 0 got " << testMap.DoesKeyExist("key4") << endl;
-
-	testMapSmall.Delete("key1");
-	testMapSmall.Delete("key2");
-
-	testMapSmall.Insert("key5", strkt);
-
-	
-
-}
-
-void TestLinkedList()
-{
-	/*LinkedList<int> list;
-	int ret;
-
-	cout << "Testing if list is empty on empty list expected 1 got" << list.isEmpty() << endl;
-	cout << "Testing pop back on empty list. expected 0 got "  << list.PopBack(&ret) << endl;
-	cout << "Testing pop front on empty list. expected 0 got " << list.PopFront(&ret) << endl;
-
-	list.PushFront(5);
-	list.PushFront(6);
-	list.PushBack(4);
-	list.PopBack(&ret);
-	cout << "Testing pop back on list. expected  4 got " <<  ret << endl;
-	list.PopFront(&ret);
-	cout << "Testing pop front on list. expected  6 got " << ret << endl;
-	list.PopBack(&ret);
-	cout << "Testing pop back on list. expected  5 got " << ret << endl;
-	cout << "Testing if list is empty on empty list expected 1 got" << list.isEmpty() << endl;
-
-	for (int i = 10; i >= 0; i--)
-	{
-		list.PushFront(i);
-	}
-
-	int ackRes;
-	ListNode<int> itBack = list.AcquireIteratorNodeBack(&ackRes);
-
-	while (true)
-	{
-		if (itBack.GetValue() == 3)
-		{
-			cout << "Testing iterator found value!" << endl;
-			break;
-		}
-		itBack = itBack.Previous();
-	}
-
-	list.ReleaseIterator();
-	list.PushFront(199);
-	list.PopFront(&ret);
-	cout << "Testing iterator release and push after, expected 199 got " << ret << endl;
-
-	ListNode<int> itFront = list.AcquireIteratorNodeFront(&ackRes);
-
-	while (true)
-	{
-		if (itFront.GetValue() == 10)
-		{
-			cout << "Testing iterator found value!" << endl;
-			break;
-		}
-		itFront = itFront.Next();
-	}
-	list.ReleaseIterator();*/
-
-}
-
+int TEST_RUNNING = 0; //Global variable to begin tests
 
 int main()
 {
-	TestQueue();
-	TestHashMap();
-	TestLinkedList();
+	HANDLE queueTests[QUEUE_TEST_THREADS] = { NULL };
+	HANDLE listTests[LIST_TEST_THREADS] = { NULL };
+	HANDLE mapTests[MAP_TEST_THREADS] = { NULL };
+	DWORD queueIDs[QUEUE_TEST_THREADS];
+	DWORD listIDs[LIST_TEST_THREADS];
+	DWORD mapIDs[MAP_TEST_THREADS];
+
+	Queue<int> testQueue(50);
+	HashMap<int> testMap(5);
+	LinkedList<int> testList;
+
+	//Create queue testers
+	for (int i = 0; i < QUEUE_TEST_THREADS; i++)
+	{
+		queueTests[i] = CreateThread(NULL, 0, &QueueTester, (LPVOID)&testQueue, 0, queueIDs + i);
+	}
+
+	//Create list testers
+	for (int i = 0; i < LIST_TEST_THREADS; i++)
+	{
+		listTests[i] = CreateThread(NULL, 0, &ListTester, (LPVOID)&testList, 0, listIDs + i);
+	}
+
+	//Create map testers
+	for (int i = 0; i < MAP_TEST_THREADS; i++)
+	{
+		mapTests[i] = CreateThread(NULL, 0, &HashMapTester, (LPVOID)&testMap, 0, mapIDs + i);
+	}
+
+	TEST_RUNNING = 1;
+	for (int i = 0; i < QUEUE_TEST_THREADS; i++)
+	{
+		WaitForSingleObject(queueTests[i], INFINITE);
+	}
+
+	for (int i = 0; i < LIST_TEST_THREADS; i++)
+	{
+		WaitForSingleObject(listTests[i], INFINITE);
+	}
+
+	for (int i = 0; i < MAP_TEST_THREADS; i++)
+	{
+		WaitForSingleObject(mapTests[i], INFINITE);
+	}
+	TEST_RUNNING = 0;
+
+	printf("\nTest finished");
+	_getch();
+}
+
+DWORD WINAPI QueueTester(LPVOID params)
+{
+	Queue<int>* testQueue = (Queue<int>*)params;
+	while (!TEST_RUNNING)
+		Sleep(100);
+	for (int i = 0; i < OPERATIONS_PER_THREAD; i++)
+	{
+		int operation = rand() % 3;
+		int value, op;
+		switch (operation)
+		{
+		case 0:
+			value = rand() % 100;
+			op = testQueue->Enqueue(value);
+			printf("\nEnqueue operation by thread %d was %d, value added %d", GetCurrentThreadId(), op, value);
+			break;
+		case 1:
+			testQueue->Dequeue();
+			printf("\nDequeue operation by thread %d", GetCurrentThreadId());
+			break;
+		case 2:
+			op = testQueue->DequeueGet(&value);
+			printf("\nDequeueGet operation by thread %d was %d, value received %d", GetCurrentThreadId(), op, value);
+		}
+
+
+	}
+	printf("\nThread %d finished", GetCurrentThreadId());
+	return 0;
+}
+
+
+DWORD WINAPI HashMapTester(LPVOID params)
+{
+	//Array of test keys
+	const char * testKeys[] = {
+	"Test100KB.txt","Test200KB.txt","Test300KB.txt",
+	"Test400KB.txt","Test500KB.txt","Test600KB.txt",
+	"Test700KB.txt","Test800KB.txt","Test900KB.txt",
+	"Test1MB.txt","Test2MB.txt","Test3MB.txt",
+	"Test4MB.txt","Test5MB.txt","Test6MB.txt",
+	"Test7MB.txt","Test100MB.txt","Test200MB.txt",
+	"Test300MB.txt","Test400MB.txt","Test500MB.txt",
+	"Test600MB.txt","Test700MB.txt","Test800MB.txt",
+	"Test900MB.txt",
+	};
+
+	HashMap<int>* testMap = (HashMap<int>*)params;
+	while (!TEST_RUNNING)
+		Sleep(100);
+	for (int i = 0; i < OPERATIONS_PER_THREAD; i++)
+	{
+		int operation = rand() % HASH_MAP_HARD_TEST; //Put HASH_MAP_FULL_TEST for more thorough but less intensive test
+		int key;
+		int value;
+		int op;
+		switch (operation)
+		{
+		case 0:
+			value = rand() % 100;
+			key = rand() % 25;
+			testMap->Insert(testKeys[key], value);
+			printf("\nInsert operation by thread %d with key %s, value added %d", GetCurrentThreadId(), testKeys[key], value);
+			break;
+		case 1:
+			key = rand() % 25;
+			testMap->Delete(testKeys[key]);
+			printf("\nDelete  operation by thread %d for key %s", GetCurrentThreadId(), testKeys[key]);
+			break;
+		case 2:
+			value = rand() % 100;
+			key = rand() % 25;
+			op = testMap->Get(testKeys[key], &value);
+			printf("\nGet operation by thread %d was %d for key %s, value received %d", GetCurrentThreadId(), op, testKeys[key], value);
+			break;
+		case 3:
+			key = rand() % 25;
+			op = testMap->DoesKeyExist(testKeys[key]);
+			printf("\nDoes key exist operation by thread %d was %d for key %s", GetCurrentThreadId(), op, testKeys[key]);
+		}
+	}
+	printf("\nThread finished");
+	return 0;
+}
+
+DWORD WINAPI ListTester(LPVOID params)
+{
+	LinkedList<int>* testList = (LinkedList<int>*)params;
+	while (!TEST_RUNNING)
+		Sleep(100);
+	for (int i = 0; i < OPERATIONS_PER_THREAD; i++)
+	{
+		int operation = rand() % 4;
+		int value, op;
+		switch (operation)
+		{
+		case 0:
+			value = rand() % 100;
+			op = testList->PushFront(value); 
+			printf("\nPushFront operation is %d by thread %d, value added %d", op,  GetCurrentThreadId(), value);
+			break;
+		case 1:
+			value = rand() % 100;
+			op = testList->PushBack(value);
+			printf("\nPusBack operation is %d by thread %d, value added %d", op, GetCurrentThreadId(), value);
+			break;
+		case 2:
+			value;
+			op = testList->PopFront(&value);
+			printf("\nPopFront operation is %d by thread %d, value got %d", op, GetCurrentThreadId(), value);
+			break;
+		case 3:
+			value;
+			op = testList->PopBack(&value);
+			printf("\nPopBack operation is %d by thread %d, value got %d", op, GetCurrentThreadId(), value);
+			break;
+		}
+	}
+	printf("\nThread finished");
+	return 0;
 }
 

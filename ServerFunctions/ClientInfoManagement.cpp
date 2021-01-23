@@ -66,6 +66,7 @@ int RemoveClientInfo(SOCKET clientSocket, HashMap<CLIENT_INFO>* clientInformatio
 	char socketBuffer[SOCKET_BUFFER_SIZE];
 	sprintf_s(socketBuffer, "%d", clientSocket);
 
+	EnterCriticalSection(&ClientInfoAccess);
 	if (clientInformationsMap->DoesKeyExist((const char*)(socketBuffer))) //Client is already in info map
 	{
 		CLIENT_INFO info;
@@ -73,13 +74,15 @@ int RemoveClientInfo(SOCKET clientSocket, HashMap<CLIENT_INFO>* clientInformatio
 
 		free(info.clientOwnedFiles);
 		clientInformationsMap->Delete((const char*)(socketBuffer));
+		LeaveCriticalSection(&ClientInfoAccess);
 		return 0;
 
 	}
 	else {
+		LeaveCriticalSection(&ClientInfoAccess);
 		return -1;
 	}
-
+	LeaveCriticalSection(&ClientInfoAccess);
 }
 
 int ClearClientInfoMap(HashMap<CLIENT_INFO>* clientInformationsMap)

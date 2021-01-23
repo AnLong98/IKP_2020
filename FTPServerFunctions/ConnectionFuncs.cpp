@@ -74,7 +74,6 @@ int AcceptIncomingConnection(LinkedList<SOCKET>* socketsList, SOCKET listenSocke
 	if (socket == INVALID_SOCKET)
 	{
 		closesocket(listenSocket);
-		WSACleanup();
 		return -1;
 	}
 
@@ -110,7 +109,7 @@ int RemoveSocketFromArray(LinkedList<SOCKET>* socketsList, SOCKET socket)
 		nodeFront = nodeFront->Next();
 	}
 
-	LeaveCriticalSection(&ConnectionsAccess);;
+	LeaveCriticalSection(&ConnectionsAccess);
 	return -1;
 }
 
@@ -137,7 +136,7 @@ int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCK
 		{
 			if (communicationQueue->isFull())
 			{
-				LeaveCriticalSection(&ConnectionsAccess);;
+				LeaveCriticalSection(&ConnectionsAccess);
 				return setSocketsCount;
 			}
 				
@@ -148,7 +147,7 @@ int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCK
 		}
 		nodeFront = nodeFront->Next();
 	}
-	LeaveCriticalSection(&ConnectionsAccess);;
+	LeaveCriticalSection(&ConnectionsAccess);
 	return setSocketsCount;
 }
 

@@ -1,4 +1,6 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
+#include <malloc.h>
+#include <stdio.h>
 #define BUFFER 20
 
 int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
@@ -105,7 +107,9 @@ int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 	*length = ntohl(atoi(buffer));
 
 	//Allocate memory for filePart
-	*data = (char*)malloc(*length);
+	*data = (char*)malloc((*length) * sizeof(char));
+	if (_heapchk() != _HEAPOK)
+		printf("HEAP ERROR P2PTFP 112");
 	if (*data == NULL)
 	{
 		//HANDLE OUT OF MEMORY

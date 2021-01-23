@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <conio.h>
 #define REQUESTS_PER_THREAD 20
-#define TEST_FILE_COUNT 3
-#define STRES_TEST_THREADS 40
+#define TEST_FILE_COUNT 4
+#define STRES_TEST_THREADS 30
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
@@ -31,6 +31,7 @@ int main()
 	"Test100KB.txt",
 	"Test1MB.txt",
 	"Test100MB.txt",
+	"Test300MB.txt",
 	};
 
 	if (InitializeWindowsSockets() == false)
@@ -41,15 +42,15 @@ int main()
 
 	for (int i = 0; i < STRES_TEST_THREADS; i++)
 	{
-		TEST_REQUEST_SENDER_DATA threadData;
-		threadData.firstPortNumber = firstPortNumber;
-		threadData.lastPortNumber = firstPortNumber + REQUESTS_PER_THREAD;
-		threadData.testFileCount = TEST_FILE_COUNT;
-		threadData.testFileNames = testFiles;
-		threadData.threadsWorking = &threadsWorking;
-		threadData.threadID = i;
-		processors[i] = CreateThread(NULL, 0, &RequestSender, (LPVOID)&threadData, 0, processorIDs + i);
-		firstPortNumber += REQUESTS_PER_THREAD;
+		TEST_REQUEST_SENDER_DATA* threadData =  (TEST_REQUEST_SENDER_DATA*) malloc(sizeof(TEST_REQUEST_SENDER_DATA));
+		threadData->firstPortNumber = firstPortNumber;
+		threadData->lastPortNumber = firstPortNumber + REQUESTS_PER_THREAD;
+		threadData->testFileCount = TEST_FILE_COUNT;
+		threadData->testFileNames = testFiles;
+		threadData->threadsWorking = &threadsWorking;
+		threadData->threadID = i;
+		processors[i] = CreateThread(NULL, 0, &RequestSender, (LPVOID)threadData, 0, processorIDs + i);
+		firstPortNumber += REQUESTS_PER_THREAD + 1;
 	}
 		
 
@@ -85,7 +86,7 @@ int main()
 DWORD WINAPI RequestSender(LPVOID params)
 {
 	TEST_REQUEST_SENDER_DATA data = *((TEST_REQUEST_SENDER_DATA*)params);
-
+	printf("\nThread starting with %d - %d", data.firstPortNumber, data.lastPortNumber);
 	for (int i = 0; i < REQUESTS_PER_THREAD; i++)
 	{
 		if (!(*(data.threadsWorking)))
@@ -158,6 +159,7 @@ DWORD WINAPI RequestSender(LPVOID params)
 		connectSocket = INVALID_SOCKET;
 		
 	}
+	free((TEST_REQUEST_SENDER_DATA*)params);
 	printf("\nThread finished working");
 	return 0;
 }
