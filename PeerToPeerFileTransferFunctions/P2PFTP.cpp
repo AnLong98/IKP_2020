@@ -65,22 +65,42 @@ int SendFilePart(SOCKET s, char* data, unsigned int length, int partNumber)
 
 int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 {
+	int iResult;
 	char buffer[BUFFER];
+
 	// #1. Recv file part number
-	int iResult = recv(s, buffer, BUFFER, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		iResult = recv(s, buffer, BUFFER, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 	*partNumber = ntohl(atoi(buffer));
 
 	// #2. Recv file part size
-	iResult = recv(s, buffer, BUFFER, 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		iResult = recv(s, buffer, BUFFER, 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 	*length = ntohl(atoi(buffer));
 
@@ -99,7 +119,13 @@ int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 		iResult = recv(s, *data + bytesReceived, *length - bytesReceived, 0);
 		if (iResult == SOCKET_ERROR || iResult == 0)
 		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
 			//HANDLE
+			free(*data);
 			return -1;
 		}
 		bytesReceived += iResult;
@@ -116,11 +142,20 @@ int SendFilePartRequest(SOCKET s, FILE_PART_REQUEST request)
 	fileReq.partNumber = htonl(request.partNumber);
 
 	// #1. Send Request
-	int iResult = send(s, (char*)&fileReq, sizeof(FILE_PART_REQUEST), 0);
-	if (iResult == SOCKET_ERROR)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		int iResult = send(s, (char*)&fileReq, sizeof(FILE_PART_REQUEST), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 
 	return 0;
@@ -132,11 +167,21 @@ int RecvFilePartRequest(SOCKET s, FILE_PART_REQUEST* request)
 	char buffer[sizeof(FILE_PART_REQUEST)];
 
 	// #1. Receive request
-	int iResult = recv(s, buffer, sizeof(FILE_PART_REQUEST), 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+
+		int iResult = recv(s, buffer, sizeof(FILE_PART_REQUEST), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 	memcpy(&fileReq, buffer, sizeof(FILE_PART_REQUEST));
 	memcpy(request->fileName, fileReq.fileName, 70);
@@ -149,11 +194,20 @@ int RecvFilePartRequest(SOCKET s, FILE_PART_REQUEST* request)
 int SendFileRequest(SOCKET s, FILE_REQUEST request)
 {
 	request.requesterListenAddress.sin_port = htons(request.requesterListenAddress.sin_port);
-	int iResult = send(s, (char*)&request, sizeof(FILE_REQUEST), 0);
-	if (iResult == SOCKET_ERROR)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		int iResult = send(s, (char*)&request, sizeof(FILE_REQUEST), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 
 	return 0;
@@ -162,11 +216,20 @@ int SendFileRequest(SOCKET s, FILE_REQUEST request)
 int RecvFileRequest(SOCKET s, FILE_REQUEST* request)
 {
 	char buffer[sizeof(FILE_REQUEST)];
-	int iResult = recv(s, buffer, sizeof(FILE_REQUEST), 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		int iResult = recv(s, buffer, sizeof(FILE_REQUEST), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 	memcpy(request, buffer, sizeof(FILE_REQUEST));
 	request->requesterListenAddress.sin_port = ntohs(request->requesterListenAddress.sin_port);
@@ -189,11 +252,20 @@ int SendFileResponse(SOCKET s, FILE_RESPONSE response)
 	response.filePartToStore = htonl(response.filePartToStore);
 	response.serverPartsNumber = htonl(response.serverPartsNumber);
 	// #1. Send Response
-	int iResult = send(s, (char*)&response, sizeof(FILE_RESPONSE), 0);
-	if (iResult == SOCKET_ERROR)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		int iResult = send(s, (char*)&response, sizeof(FILE_RESPONSE), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 
 	return 0;
@@ -203,11 +275,20 @@ int RecvFileResponse(SOCKET s, FILE_RESPONSE* response)
 {
 	char buffer[sizeof(FILE_RESPONSE)];
 	// #1. Recv Response
-	int iResult = recv(s, buffer, sizeof(FILE_RESPONSE), 0);
-	if (iResult == SOCKET_ERROR || iResult == 0)
+	while (true)
 	{
-		//HANDLE
-		return -1;
+		int iResult = recv(s, buffer, sizeof(FILE_RESPONSE), 0);
+		if (iResult == SOCKET_ERROR || iResult == 0)
+		{
+			if (WSAGetLastError() == WSAEWOULDBLOCK)
+			{
+				Sleep(1);
+				continue;
+			}
+			//HANDLE
+			return -1;
+		}
+		break;
 	}
 
 	memcpy(response, buffer, sizeof(FILE_RESPONSE));

@@ -26,7 +26,7 @@ void DeleteClientInfoHandle();
 	Returns 0 if successfull, -2 if library handle not initialized.
 	THREAD SAFE
 */
-int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, HashMap<CLIENT_INFO>* clientInformationsMap);
+int AddClientInfo(SOCKET socket, FILE_DATA data, SOCKADDR_IN clientAddress, HashMap<CLIENT_INFO>* clientInformationsMap);
 
 /*
 	Removes informations about client and his file parts from hash map.
@@ -36,7 +36,7 @@ int AddClientInfo(SOCKET* socket, FILE_DATA data, SOCKADDR_IN clientAddress, Has
 	Returns 0 if successfull,-2 if library handle not initialized, -1 if client not found.
 	THREAD SAFE
 */
-int RemoveClientInfo(SOCKET* clientSocket, HashMap<CLIENT_INFO>* clientInformationsMap);
+int RemoveClientInfo(SOCKET clientSocket, HashMap<CLIENT_INFO>* clientInformationsMap);
 
 /*
 	Removes all client info

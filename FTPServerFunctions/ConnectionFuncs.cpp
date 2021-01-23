@@ -1,24 +1,77 @@
 #include "../FTPServerFunctions/ConnectionFuncs.h"
+#define SOCKET_BUFFER_SIZE 20
 
-int ShutdownConnection(SOCKET* socket)
+CRITICAL_SECTION ConnectionsAccess;
+int isInitConnectionsHandle = 0;
+
+void InitConnectionsHandle()
+{
+	InitializeCriticalSection(&ConnectionsAccess);
+	isInitConnectionsHandle = 1;
+}
+
+void DeleteConnectionsHandle()
+{
+	DeleteCriticalSection(&ConnectionsAccess);
+	isInitConnectionsHandle = 0;
+}
+
+int ShutdownConnection(SOCKET socket)
 {
 	// shutdown the connection
-	int iResult = shutdown(*socket, SD_BOTH);
+	int iResult = shutdown(socket, SD_BOTH);
 	if (iResult == SOCKET_ERROR)
 	{
-		closesocket(*socket);
+		closesocket(socket);
 		return -1;
 	}
-	closesocket(*socket);
+	closesocket(socket);
 	return 0;
 }
 
-
-int AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET listenSocket)
+SOCKET* GetAllSockets(LinkedList<SOCKET>* socketsArray, int* socketsCount)
 {
-	acceptedSockets[*freeIndex] = accept(listenSocket, NULL, NULL);
+	if (!isInitConnectionsHandle)
+		return NULL;
 
-	if (acceptedSockets[*freeIndex] == INVALID_SOCKET)
+	
+	EnterCriticalSection(&ConnectionsAccess);
+	if (socketsArray->Count() == 0)
+	{
+		LeaveCriticalSection(&ConnectionsAccess);
+		
+		*socketsCount = 0;
+		return NULL;
+
+	}
+
+	SOCKET* array = (SOCKET*)malloc(socketsArray->Count() * sizeof(SOCKET));
+	int i = 0;
+	ListNode<SOCKET>* nodeFront = socketsArray->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
+	{
+		array[i] = nodeFront->GetValue();
+		i++;
+
+		nodeFront = nodeFront->Next();
+	}
+
+	LeaveCriticalSection(&ConnectionsAccess);
+	
+	*socketsCount = i;
+	return array;
+
+}
+
+
+int AcceptIncomingConnection(LinkedList<SOCKET>* socketsList, SOCKET listenSocket)
+{
+	if (!isInitConnectionsHandle)
+		return -2;
+
+	SOCKET socket = accept(listenSocket, NULL, NULL);
+
+	if (socket == INVALID_SOCKET)
 	{
 		closesocket(listenSocket);
 		WSACleanup();
@@ -26,68 +79,104 @@ int AcceptIncomingConnection(SOCKET acceptedSockets[], int *freeIndex, SOCKET li
 	}
 
 	unsigned long mode = 1; //non-blocking mode
-	int iResult = ioctlsocket(acceptedSockets[*freeIndex], FIONBIO, &mode);
-	(*freeIndex)++;
+	int iResult = ioctlsocket(socket, FIONBIO, &mode);
+	
+	EnterCriticalSection(&ConnectionsAccess);
+	socketsList->PushFront(socket);
+	LeaveCriticalSection(&ConnectionsAccess);
+	
+
 	return 0;
 }
 
-int RemoveSocketFromArray(SOCKET acceptedSockets[], SOCKET* socket, int *freeIndex)
+int RemoveSocketFromArray(LinkedList<SOCKET>* socketsList, SOCKET socket)
 {
-	for (int i = 0; i < *freeIndex; i++)
+	if (!isInitConnectionsHandle)
+		return -2;
+
+	
+	EnterCriticalSection(&ConnectionsAccess);
+	ListNode<SOCKET>* nodeFront = socketsList->AcquireIteratorNodeFront();
+
+	while (nodeFront != nullptr)
 	{
-		if (acceptedSockets + i == socket)
+		if (nodeFront->GetValue() == socket)
 		{
-			for (int j = i + 1; j < *freeIndex; j++)
-			{
-				acceptedSockets[j - 1] = acceptedSockets[j];
-			}
-			acceptedSockets[(*freeIndex) - 1] = INVALID_SOCKET;
-			(*freeIndex)--;
+			socketsList->RemoveElement(nodeFront);
+			LeaveCriticalSection(&ConnectionsAccess);
 			return 0;
 		}
+
+		nodeFront = nodeFront->Next();
 	}
+
+	LeaveCriticalSection(&ConnectionsAccess);;
 	return -1;
 }
 
-int CheckSetSockets(int* socketsTaken, SOCKET acceptedSockets[], fd_set* readfds, Queue<SOCKET*>* communicationQueue, HashMap<SOCKET*>* processingSocketsMap)
+int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCKET>* communicationQueue, HashMap<SOCKET>* processingSocketsMap)
 {
+	if (!isInitConnectionsHandle)
+		return -2;
+
 	int setSocketsCount = 0;
-	for (int i = 0; i < *socketsTaken; i++)
+	
+	EnterCriticalSection(&ConnectionsAccess);
+	ListNode<SOCKET>* nodeFront = socketsList->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
 	{
-		if (processingSocketsMap->DoesKeyExist((char*)(acceptedSockets + i)))
+		char socketBuffer[SOCKET_BUFFER_SIZE];
+		SOCKET socket = nodeFront->GetValue();
+		sprintf_s(socketBuffer, "%d", socket);
+		if ( processingSocketsMap->DoesKeyExist((const char*) socketBuffer))
 		{
+			nodeFront = nodeFront->Next();
 			continue;  //check if socket is already under processing
 		}
-		if (FD_ISSET(acceptedSockets[i], readfds))
+		if (FD_ISSET(socket, readfds))
 		{
 			if (communicationQueue->isFull())
+			{
+				LeaveCriticalSection(&ConnectionsAccess);;
 				return setSocketsCount;
-			printf("\nSoket %d primio", i);
-			communicationQueue->Enqueue(acceptedSockets + i);
+			}
+				
+			communicationQueue->Enqueue(socket);
 			//Add socket to processing map to avoid double reading
-			processingSocketsMap->Insert((const char*)(acceptedSockets + i), acceptedSockets + i);
+			processingSocketsMap->Insert((const char*)socketBuffer, socket);
 			setSocketsCount++;
 		}
-
+		nodeFront = nodeFront->Next();
 	}
-
+	LeaveCriticalSection(&ConnectionsAccess);;
 	return setSocketsCount;
 }
 
-int DisconnectBrokenSockets(SOCKET sockets[], int* socketsCount)
+int DisconnectBrokenSockets(LinkedList<SOCKET>* socketsList)
 {
+	if (!isInitConnectionsHandle)
+		return -2;
 
 	int brokenSockets = 0;
-	for (int i = 0; i < *socketsCount; i++)
+
+	EnterCriticalSection(&ConnectionsAccess);
+	ListNode<SOCKET>* nodeFront = socketsList->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
 	{
-		if (IsSocketBroken(sockets[i]))
+		SOCKET socket = nodeFront->GetValue();
+		if (IsSocketBroken(socket))
 		{
-			ShutdownConnection(sockets + i);
-			RemoveSocketFromArray(sockets, sockets + i, socketsCount);
+			ShutdownConnection(socket);
+			ListNode<SOCKET>* nodeRemove = nodeFront;
+			nodeFront = nodeFront->Next();
+			socketsList->RemoveElement(nodeRemove);
 			brokenSockets++;
+			continue;
 		}
+		nodeFront = nodeFront->Next();
 	}
 
+	LeaveCriticalSection(&ConnectionsAccess);;
 	return brokenSockets;
 }
 

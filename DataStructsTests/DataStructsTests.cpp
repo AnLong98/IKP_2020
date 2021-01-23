@@ -109,7 +109,7 @@ void TestHashMap()
 
 void TestLinkedList()
 {
-	LinkedList<int> list;
+	/*LinkedList<int> list;
 	int ret;
 
 	cout << "Testing if list is empty on empty list expected 1 got" << list.isEmpty() << endl;
@@ -161,7 +161,7 @@ void TestLinkedList()
 		}
 		itFront = itFront.Next();
 	}
-	list.ReleaseIterator();
+	list.ReleaseIterator();*/
 
 }
 

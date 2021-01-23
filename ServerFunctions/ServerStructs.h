@@ -3,6 +3,7 @@
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../DataStructures/Queue.h"
 #include "../DataStructures/HashMap.h"
+#include "../DataStructures/LinkedList.h"
 
 /*
 	Structure representing file part data stored on server
@@ -35,7 +36,7 @@ typedef struct FILE_DATA
 */
 typedef struct CLIENT_INFO
 {
-	SOCKET* clientSocket;
+	SOCKET clientSocket;
 	SOCKADDR_IN clientAddress;
 	FILE_DATA* clientOwnedFiles;
 	unsigned int fileDataArraySize;
@@ -48,16 +49,25 @@ typedef struct CLIENT_INFO
 */
 typedef struct SERVER_THREAD_DATA
 {
-	HashMap<SOCKET*> * processingSocketsMap;
+	HashMap<SOCKET> * processingSocketsMap;
 	HashMap<int>* loadingFilesMap;
 	HashMap<FILE_DATA> * fileInfoMap;
-	Queue<SOCKET*> * incomingRequestsQueue;
+	Queue<SOCKET> * incomingRequestsQueue;
 	HashMap<CLIENT_INFO>* clientInformationsMap;
-	SOCKET* acceptedSocketsArray;
+	LinkedList<SOCKET>* acceptedSocketsArray;
 	HANDLE* FinishSignal;
 	HANDLE* FullQueue;
 	CRITICAL_SECTION* AcceptedSocketsAccess;
 	CRITICAL_SECTION* LoadingFilesAccess;
-	int* socketsTaken;
 	int* serverWorking;
 }S_DATA;
+
+
+/*
+	Structure representing informations that server controller thread uses
+*/
+typedef struct SERVER_CONTROLLER_THREAD_DATA
+{
+	HANDLE* FinishSignal;
+	int* serverWorking;
+}S_CONT_DATA;

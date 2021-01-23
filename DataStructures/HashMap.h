@@ -107,7 +107,6 @@ long long HashMap<T>::GetHash(const char* key)
 	int m = (int)(1e9 + 9); //very large number to prevent collision
 	long long powerOfP = 1;
 	long long hashVal = 0;
-
 	for (int i = 0; i < (int)strlen(key); i++)
 	{
 		hashVal = (hashVal + (key[i] - 'a' + 1) * powerOfP) % m;
@@ -251,7 +250,7 @@ bool HashMap<T>::Get(const char* key, T* value)
 
 	unsigned  long long hashValue = GetHash(key);
 
-	EnterCriticalSection(&MapCS);;
+	EnterCriticalSection(&MapCS);
 	unsigned int index = hashValue % this->size;
 	if (nodes[index].key == nullptr)
 	{

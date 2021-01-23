@@ -3,8 +3,10 @@
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <conio.h>
 #include "../DataStructures/HashMap.h"
 #include "../DataStructures/Queue.h"
+#include "../DataStructures/LinkedList.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP_Structs.h"
 #include "../PeerToPeerFileTransferFunctions/P2PLimitations.h"
@@ -16,43 +18,48 @@
 #define DEFAULT_PORT "27016"
 #define MAX_QUEUE 20
 #define SERVER_THREADS 6
+#define SOCKET_BUFFER_SIZE 20
 #define SAFE_DELETE_HANDLE(a)  if(a){CloseHandle(a);}
 
 bool InitializeWindowsSockets();
 DWORD WINAPI ProcessIncomingFileRequest(LPVOID param);
+DWORD WINAPI ProcessAdminInput(LPVOID param);
 
 
 int  main(void)
 {
 	{
 		//Server data structures
-		HashMap<SOCKET*> processingSocketsMap;
+		HashMap<SOCKET> processingSocketsMap;
 		HashMap<FILE_DATA> fileInfoMap;
 		HashMap<int> loadingFilesMap;					//Hash map that stores names of file that are being loaded by server threads, used to avoid double loads
-		Queue<SOCKET*> incomingRequestsQueue;
+		Queue<SOCKET> incomingRequestsQueue;
 		HashMap<CLIENT_INFO> clientInformationsMap;
-		SOCKET acceptedSockets[MAX_CLIENTS];
+		LinkedList<SOCKET> acceptedSockets;
 		HANDLE FinishSignal;							  // Semaphore to signalize threads to abort.
 		HANDLE FullQueue;								  // Semaphore which indicates how many (if any) sockets are enqueued on IR queue.
-		CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
+		//CRITICAL_SECTION AcceptedSocketsAccess;			  // Critical section for accepted sockets access
 		CRITICAL_SECTION LoadingFilesAccess;			  // Critical section for access to loading files structs
-		int socketsTaken = 0;
 		int serverWorking = 1;
+		int socketsTaken = 0;
 
 		//Init server thread struct
 		SERVER_THREAD_DATA threadData;
-		threadData.acceptedSocketsArray = acceptedSockets;
+		threadData.acceptedSocketsArray = &acceptedSockets;
 		threadData.clientInformationsMap = &clientInformationsMap;
 		threadData.fileInfoMap = &fileInfoMap;
 		threadData.FinishSignal = &FinishSignal;
 		threadData.FullQueue = &FullQueue;
 		threadData.incomingRequestsQueue = &incomingRequestsQueue;
 		threadData.processingSocketsMap = &processingSocketsMap;
-		threadData.socketsTaken = &socketsTaken;
-		threadData.AcceptedSocketsAccess = &AcceptedSocketsAccess;
 		threadData.LoadingFilesAccess = &LoadingFilesAccess;
 		threadData.serverWorking = &serverWorking;
 		threadData.loadingFilesMap = &loadingFilesMap;
+
+		//Init server controller struct
+		SERVER_CONTROLLER_THREAD_DATA controllerData;
+		controllerData.FinishSignal = &FinishSignal;
+		controllerData.serverWorking = &serverWorking;
 
 		// Socket used for listening for new clients 
 		SOCKET listenSocket = INVALID_SOCKET;
@@ -65,7 +72,9 @@ int  main(void)
 		unsigned long mode = 1; //non-blocking mode
 
 		HANDLE processors[SERVER_THREADS] = { NULL };
+		HANDLE serverController = NULL;
 		DWORD processorIDs[SERVER_THREADS];
+		DWORD serverControllerID;
 
 
 		//Create Semaphores
@@ -75,25 +84,26 @@ int  main(void)
 		//Init critical sections and threads if semaphores are ok
 		if (FullQueue && FinishSignal)
 		{
-			InitializeCriticalSection(&AcceptedSocketsAccess);
 			InitializeCriticalSection(&LoadingFilesAccess);
 
 			for (int i = 0; i < SERVER_THREADS; i++)
 				processors[i] = CreateThread(NULL, 0, &ProcessIncomingFileRequest, (LPVOID)&threadData, 0, processorIDs + i);
+			
+			serverController = CreateThread(NULL, 0, &ProcessAdminInput, (LPVOID)&controllerData, 0, &serverControllerID);
 
 			for (int i = 0; i < SERVER_THREADS; i++)
 			{
-				if (!processors[i]) {
+				if (!processors[i] || !serverController) {
 
 					ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 					printf("\nReleased finish");
 
 					for (int i = 0; i < SERVER_THREADS; i++)
 						SAFE_DELETE_HANDLE(processors[i]);
+					SAFE_DELETE_HANDLE(serverController);
 					SAFE_DELETE_HANDLE(FullQueue);
 					SAFE_DELETE_HANDLE(FinishSignal);
 
-					DeleteCriticalSection(&AcceptedSocketsAccess);
 					DeleteCriticalSection(&LoadingFilesAccess);
 					return 0;
 				}
@@ -102,6 +112,7 @@ int  main(void)
 
 		InitClientInfoHandle();
 		InitFileManagementHandle();
+		InitConnectionsHandle();
 
 
 
@@ -178,20 +189,22 @@ int  main(void)
 			return 0;
 		}
 
-		printf("Server initialized, waiting for clients.\n");
-		//int i = 0;
+		printf("Server initialized, waiting for clients.\n Press Q to close\n");
 		while (serverWorking)
 		{
-			//if (i == 5)
-			//	break;
 			FD_ZERO(&readfds);
 			FD_SET(listenSocket, &readfds);
 
-
-			for (int i = 0; i < socketsTaken; i++)
+			int socketsCount = 0;
+			SOCKET* sockets = GetAllSockets(&acceptedSockets, &socketsCount);
+			socketsTaken = socketsCount;
+			for (int i = 0; i < socketsCount; i++)
 			{
-				FD_SET(acceptedSockets[i], &readfds);
+				FD_SET(sockets[i], &readfds);
 			}
+
+			if (socketsCount != 0)
+				free(sockets);
 
 			timeval timeVal;
 			timeVal.tv_sec = 3;
@@ -203,27 +216,32 @@ int  main(void)
 				continue;
 			}
 			else if (result == SOCKET_ERROR) {
-
-				EnterCriticalSection(&AcceptedSocketsAccess);
-				DisconnectBrokenSockets(acceptedSockets, &socketsTaken);
-				LeaveCriticalSection(&AcceptedSocketsAccess);
-
+				//printf("\nDisconnecting broken sockets");
+				//int disconnectedSockets = DisconnectBrokenSockets(&acceptedSockets);
+				//socketsTaken -= disconnectedSockets;
+				//printf("\nDisconnected %d sockets", disconnectedSockets);
+				printf("\nError detected on select, sleeping for 500ms to let worker threads handle");
+				Sleep(500);
 				continue;	
 			}
 			else {
 				if (FD_ISSET(listenSocket, &readfds) && socketsTaken < MAX_CLIENTS)
 				{
-					EnterCriticalSection(&AcceptedSocketsAccess);
-					AcceptIncomingConnection(acceptedSockets, &socketsTaken, listenSocket);
-					//i++;
-					printf("Primio konekciju na %d", socketsTaken - 1);
-					LeaveCriticalSection(&AcceptedSocketsAccess);
+					if (AcceptIncomingConnection(&acceptedSockets, listenSocket) == 0)
+					{
+						printf("\nAccepted Connection");
+						socketsTaken++;
+					}
+					else
+					{
+						printf("\nAccepting new connection failed");
+						serverWorking = 0;
+						break;
+					}
+					
 				}
 
-
-				EnterCriticalSection(&AcceptedSocketsAccess);
-				int setSocketsCount = CheckSetSockets(&socketsTaken, acceptedSockets, &readfds, &incomingRequestsQueue, &processingSocketsMap);
-				LeaveCriticalSection(&AcceptedSocketsAccess);
+				int setSocketsCount = CheckSetSockets(&acceptedSockets, &readfds, &incomingRequestsQueue, &processingSocketsMap);
 				if (setSocketsCount > 0)
 				{
 					printf("\n%d requests arrived.", setSocketsCount);
@@ -235,20 +253,25 @@ int  main(void)
 
 
 		}
+		printf("\nServer is not listening any more");
 		ReleaseSemaphore(FinishSignal, SERVER_THREADS, NULL);
 		for (int i = 0; i < SERVER_THREADS; i++)
 			SAFE_DELETE_HANDLE(processors[i]);
+		SAFE_DELETE_HANDLE(serverController);
 		SAFE_DELETE_HANDLE(FullQueue);
 		SAFE_DELETE_HANDLE(FinishSignal);
 
-		DeleteCriticalSection(&AcceptedSocketsAccess);
 		DeleteCriticalSection(&LoadingFilesAccess);
 
-		for (int i = 0; i < socketsTaken; i++)
+		int socketsCount = 0;
+		SOCKET* sockets = GetAllSockets(&acceptedSockets, &socketsCount);
+		for (int i = 0; i < socketsCount; i++)
 		{
-			ShutdownConnection(acceptedSockets + i);
+			ShutdownConnection(sockets[i]);
 		}
 
+		if (socketsCount > 0)
+			free(sockets);
 		// cleanup
 		closesocket(listenSocket);
 		WSACleanup();
@@ -258,9 +281,11 @@ int  main(void)
 
 		DeleteClientInfoHandle();
 		DeleteFileManagementHandle();
+		DeleteConnectionsHandle();
 
 	}
-	getchar();
+	printf("\nPress any key to close");
+	_getch();
 	return 0;
 }
 
@@ -281,24 +306,27 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 {
 	//Get server thread data
 	SERVER_THREAD_DATA threadData = *((SERVER_THREAD_DATA*)param);
-	Queue<SOCKET*>* incomingRequestsQueue = threadData.incomingRequestsQueue;
-	SOCKET* acceptedSockets = threadData.acceptedSocketsArray;
+	Queue<SOCKET>* incomingRequestsQueue = threadData.incomingRequestsQueue;
+	LinkedList<SOCKET>* acceptedSockets = threadData.acceptedSocketsArray;
 	CRITICAL_SECTION* AcceptedSocketsAccess = threadData.AcceptedSocketsAccess;
-	HashMap<SOCKET*>* processingSocketsMap = threadData.processingSocketsMap;
+	HashMap<SOCKET>* processingSocketsMap = threadData.processingSocketsMap;
 	HashMap<FILE_DATA>* fileInfoMap = threadData.fileInfoMap;
 	HashMap<CLIENT_INFO>* clientInfoMap = threadData.clientInformationsMap;
 	HashMap<int>* loadingFilesMap = threadData.loadingFilesMap;
-	int* socketsTaken = threadData.socketsTaken;
 	int* serverWorking = threadData.serverWorking;
 
 	const int semaphoreNum = 2;
 	HANDLE semaphores[semaphoreNum] = { *(threadData.FinishSignal), *(threadData.FullQueue) };
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1) {
-		SOCKET* requestSocket;
+		SOCKET requestSocket;
 		int getResult = incomingRequestsQueue->DequeueGet(&requestSocket);  //Get request from queue
 		if (getResult == 0)
 			continue;
 		printf("\nDequeued request from queue");
+
+		//Convert socket to string to use as key
+		char socketBuffer[SOCKET_BUFFER_SIZE];
+		sprintf_s(socketBuffer, "%d", requestSocket);
 
 		FILE_DATA fileData;
 		FILE_PART* fileParts = NULL;
@@ -308,29 +336,27 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		int isAssignedWithPart = 0;
 
 		//Receive request from socket
-		int result = RecvFileRequest(*requestSocket, &fileRequest);
+		int result = RecvFileRequest(requestSocket, &fileRequest);
 		if (result == -1)
 		{
 
-			printf("\nClient %d has disconnected", requestSocket - acceptedSockets);
+			printf("\nClient has disconnected");
 			CLIENT_INFO info;
-			if (clientInfoMap->Get((const char*)requestSocket, &info))
+			if (clientInfoMap->Get((const char*)socketBuffer, &info))
 			{
 				printf("\nUnassigning client owned parts");
 				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
 			}
 			RemoveClientInfo(requestSocket, clientInfoMap);
-			EnterCriticalSection(AcceptedSocketsAccess);
 			result = ShutdownConnection(requestSocket);
-			processingSocketsMap->Delete((const char*)(requestSocket));
-			result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
-			LeaveCriticalSection(AcceptedSocketsAccess);
+			result += RemoveSocketFromArray(acceptedSockets, requestSocket);
 			if (result != 0) //Shutdown everything in case something went terribly wrong
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
 				printf("\nRemove client failed failed");
 				*serverWorking = 0;
 			}
+			processingSocketsMap->Delete((const char*)(socketBuffer));
 			printf("\nRemoved client!");
 			continue;
 
@@ -339,7 +365,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		
 
 		//Remove socket from processing map
-		processingSocketsMap->Delete((const char*)(requestSocket));
+		processingSocketsMap->Delete((const char*)(socketBuffer));
 
 		EnterCriticalSection(threadData.LoadingFilesAccess);
 		int isBeingLoaded = loadingFilesMap->DoesKeyExist(fileRequest.fileName);
@@ -359,7 +385,7 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		isFileLoaded = fileInfoMap->DoesKeyExist(fileRequest.fileName);
 		if (isFileLoaded)//File is loaded and can be given back to client
 		{
-			printf("File %s is already loaded in memory.", fileRequest.fileName);
+			printf("\nFile %s is already loaded in memory.", fileRequest.fileName);
 			fileInfoMap->Get(fileRequest.fileName, &fileData);
 			int result = PackExistingFileResponse(&fileResponse, fileData, fileRequest, serverOwnedParts, fileInfoMap);
 			if (result != 0) //Shutdown everything in case something went terribly wrong
@@ -426,21 +452,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 
 		}
 
-		if (SendFileResponse(*requestSocket, fileResponse) != 0)
+		if (SendFileResponse(requestSocket, fileResponse) != 0)
 		{
-			printf("\nClient %d has disconnected", requestSocket - acceptedSockets);
+			printf("\nClient has disconnected");
 			CLIENT_INFO info;
-			if (clientInfoMap->Get((const char*)requestSocket, &info))
+			if (clientInfoMap->Get((const char*)socketBuffer, &info))
 			{
 				printf("\nUnassigning client owned parts as response failed");
 				UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
 
 			}
 			RemoveClientInfo(requestSocket, clientInfoMap);
-			EnterCriticalSection(AcceptedSocketsAccess);
 			result = ShutdownConnection(requestSocket);
-			result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
-			LeaveCriticalSection(AcceptedSocketsAccess);
+			result += RemoveSocketFromArray(acceptedSockets, requestSocket);
 			if (result != 0) //Shutdown everything in case something went terribly wrong
 			{
 				ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
@@ -456,21 +480,19 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 		{
 			int partIndex = serverOwnedParts[i];
 			FILE_PART partToSend = fileParts[partIndex];
-			if (SendFilePart(*requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
+			if (SendFilePart(requestSocket, partToSend.partStartPointer, partToSend.partSize, partIndex) != 0)
 			{
 				printf("\nFailed to send part number %d. Shutting down connection to client. Error %ld", i, WSAGetLastError());
 				CLIENT_INFO info;
-				if (clientInfoMap->Get((const char*)requestSocket, &info))
+				if (clientInfoMap->Get((const char*)socketBuffer, &info))
 				{
 					printf("\nUnassigning client owned parts as send part failed");
 					UnassignFileParts(info.clientAddress, fileInfoMap, info.clientOwnedFiles, info.ownedFilesCount);
 
 				}
 				RemoveClientInfo(requestSocket, clientInfoMap);
-				EnterCriticalSection(AcceptedSocketsAccess);
 				result = ShutdownConnection(requestSocket);
-				result += RemoveSocketFromArray(acceptedSockets, requestSocket, socketsTaken);
-				LeaveCriticalSection(AcceptedSocketsAccess);
+				result += RemoveSocketFromArray(acceptedSockets, requestSocket);
 				if (result != 0) //Shutdown everything in case something went terribly wrong
 				{
 					ReleaseSemaphore(*(threadData.FinishSignal), SERVER_THREADS, NULL);
@@ -511,6 +533,30 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 	printf("\nThread finished.");
 
 	
+	return 0;
+}
+
+
+DWORD WINAPI ProcessAdminInput(LPVOID param)
+{
+	SERVER_CONTROLLER_THREAD_DATA data = *((SERVER_CONTROLLER_THREAD_DATA*)param);
+	int* serverWorking = data.serverWorking;
+	while (serverWorking)
+	{
+		if (_kbhit())
+		{
+			char ch = _getch();
+			if (ch == 'Q' or ch == 'q')
+			{
+				*serverWorking = 0;
+				ReleaseSemaphore(*(data.FinishSignal), SERVER_THREADS, NULL);
+				printf("\n\n-----Server shutting down as per your command------\n\n");
+				continue;
+			}
+		}
+		Sleep(100); //Sleep to avoid 
+	}
+
 	return 0;
 }
 

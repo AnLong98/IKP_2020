@@ -266,3 +266,7 @@ __pycache__/
 /Client/bigtest.txt
 /Server/bibig.txt
 /Server/bigtest.txt
+/Server/Test100KB.txt
+/Server/Test1MB.txt
+/Server/Test100MB.txt
+/Server/Test300MB.txt

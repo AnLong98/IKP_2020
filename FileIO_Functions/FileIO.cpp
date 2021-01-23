@@ -1,13 +1,10 @@
 #include "../FileIO_Functions/FileIO.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <direct.h>
 
 int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* size)
 {
 	char path[80];
-	_getcwd(path, 80);
-	printf("Current Directory = %s", path);
 
 	FILE* pFile = NULL;
 	errno_t status = fopen_s(&pFile, fileName, "rb");
