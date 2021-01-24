@@ -234,7 +234,6 @@ void HashMap<T>::Insert(const char* key, T value)
 		//Add new
 		{
 			char* keyCopy = _strdup(key);
-			printf("\nKey copy %s", keyCopy);
 			HashMapNode<T>* newNode = new HashMapNode<T>(keyCopy, value);
 			node->next = newNode;
 			countUnique++;

@@ -34,9 +34,12 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 		LeaveCriticalSection(&FileInfoAccess);
 		return -1;
 	}
-	if (fileData.partArraySize == fileData.partsOnClients)//Parts array is full and should be increased
+	if (fileData.partArraySize - 1 == fileData.partsOnClients)//Parts array is full and should be increased
 	{
-		fileData.filePartDataArray = (FILE_PART*)realloc(fileData.filePartDataArray, fileData.partArraySize + FILE_PARTS); //Increase array by the count of file parts
+		FILE_PART* tmp = (FILE_PART*)realloc(fileData.filePartDataArray, fileData.partArraySize + FILE_PARTS); //Increase array by the count of file parts
+		if (tmp == NULL)
+			return -1;
+		fileData.filePartDataArray = tmp;
 		fileData.partArraySize += FILE_PARTS;
 	}
 	if (fileData.filePartDataArray == NULL)
@@ -45,17 +48,24 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 		return -1;
 	}
 	partAssigned = fileData.nextPartToAssign;
-	int clientFilePartIndex = fileData.nextPartToAssign;
 
-	//Change this possibly
-	while (clientFilePartIndex < (int)fileData.partArraySize)
+	int canBeAssigned = 0;
+	int clientFilePartIndex = -1;
+
+	//Find part to assign
+	for (int i = 0; i < fileData.partArraySize; i++)
 	{
-		if (fileData.filePartDataArray[clientFilePartIndex].isServerOnly)
+		if (fileData.filePartDataArray[i].isServerOnly)
 		{
+			canBeAssigned = 1;
+			clientFilePartIndex = i;
+			partAssigned = clientFilePartIndex % FILE_PARTS;
 			break;
 		}
-		clientFilePartIndex += FILE_PARTS;
 	}
+
+	if (!canBeAssigned)
+		return -1;
 	
 	fileData.nextPartToAssign = (fileData.nextPartToAssign + 1) % FILE_PARTS;									//Set next part to assign
 	
@@ -114,7 +124,7 @@ int DivideFileIntoParts(char* loadedFileBuffer, size_t fileSize, unsigned int pa
 }
 
 
-int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, FILE_DATA* fileDataArray, unsigned int filePartsCount)
+int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, CLIENT_INFO info, unsigned int filePartsCount)
 {
 	if (!isInitFileManagementHandle)
 		return -2;
@@ -127,7 +137,7 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, F
 	for (int i = 0; i < (int)filePartsCount; i++)//Iterate through all client owned files file data and unassign client's part from part's array
 	{
 		FILE_DATA fileData;
-		if (!fileInfoMap->Get(fileDataArray[i].fileName, &fileData))//Client does not have any file parts
+		if (!fileInfoMap->Get(info.clientOwnedFiles[i], &fileData))//Client does not have any file parts
 		{
 			return -1;
 		}
@@ -190,22 +200,25 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, F
 		*/
 
 		fileData.partsOnClients--; //There is one less client owned part now.
+		fileInfoMap->Insert(info.clientOwnedFiles[i], fileData);
 		LeaveCriticalSection(&FileInfoAccess);
-
-		fileInfoMap->Insert(fileDataArray[i].fileName, fileData);
 	}
 	
 	return 0;
 }
 
 
-int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap)
+int PackExistingFileResponse(FILE_RESPONSE* response, const char* fileName, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap, FILE_PART* partsToSendCopy)
 {
 	int serverOwnedPartsCount = 0;
 	int clientOwnedPartsCount = 0;
 
+	EnterCriticalSection(&FileInfoAccess);
+	FILE_DATA fileData;
+	fileInfoMap->Get(fileName, &fileData);
 	for (int i = 0; i < FILE_PARTS; i++)
 	{
+		partsToSendCopy[i] = fileData.filePartDataArray[i];
 		if (fileData.filePartDataArray[i].isServerOnly)
 		{
 			serverOwnedParts[serverOwnedPartsCount++] = i;
@@ -219,6 +232,7 @@ int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_R
 		}
 
 	}
+	LeaveCriticalSection(&FileInfoAccess);
 	response->fileExists = 1;
 	response->clientPartsNumber = clientOwnedPartsCount;
 	response->serverPartsNumber = serverOwnedPartsCount;

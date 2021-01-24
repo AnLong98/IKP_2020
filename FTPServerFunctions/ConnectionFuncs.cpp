@@ -25,7 +25,7 @@ int ShutdownConnection(SOCKET socket)
 		closesocket(socket);
 		return -1;
 	}
-	closesocket(socket);
+	//closesocket(socket);
 	return 0;
 }
 
@@ -46,6 +46,8 @@ SOCKET* GetAllSockets(LinkedList<SOCKET>* socketsArray, int* socketsCount)
 	}
 
 	SOCKET* array = (SOCKET*)malloc(socketsArray->Count() * sizeof(SOCKET));
+	if (array == NULL)
+		return NULL;
 	int i = 0;
 	ListNode<SOCKET>* nodeFront = socketsArray->AcquireIteratorNodeFront();
 	while (nodeFront != nullptr)

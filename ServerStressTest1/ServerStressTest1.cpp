@@ -153,7 +153,6 @@ DWORD WINAPI RequestSender(LPVOID params)
 			}
 			free(part);
 		}
-
 		shutdown(connectSocket, SD_BOTH);
 		closesocket(connectSocket);
 		connectSocket = INVALID_SOCKET;
