@@ -200,11 +200,11 @@ int  main(void)
 			socketsTaken = socketsCount;
 			for (int i = 0; i < socketsCount; i++)
 			{
-				//Convert socket to string to use as key
+				/*//Convert socket to string to use as key
 				char socketBuffer[SOCKET_BUFFER_SIZE];
 				sprintf_s(socketBuffer, "%d", sockets[i]);
 
-				if(!processingSocketsMap.DoesKeyExist(socketBuffer))
+				if(!processingSocketsMap.DoesKeyExist(socketBuffer))*/
 					FD_SET(sockets[i], &readfds);
 			}
 

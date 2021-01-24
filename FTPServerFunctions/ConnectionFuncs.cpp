@@ -138,6 +138,7 @@ int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCK
 		{
 			if (communicationQueue->isFull())
 			{
+				printf("\nQUEUE FULL");
 				LeaveCriticalSection(&ConnectionsAccess);
 				return setSocketsCount;
 			}
