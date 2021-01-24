@@ -247,7 +247,14 @@ int  main(void)
 				if (setSocketsCount > 0)
 				{
 					printf("\n%d requests arrived.", setSocketsCount);
-					ReleaseSemaphore(FullQueue, setSocketsCount, NULL);
+					int socketsSignaled = 0;
+					for (int i = 0; i < setSocketsCount; i++)
+					{
+						while (!ReleaseSemaphore(FullQueue, 1, NULL))
+						{
+							Sleep(200);
+						}
+					}
 				}
 
 
