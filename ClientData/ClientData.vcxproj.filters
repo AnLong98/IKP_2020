@@ -18,9 +18,15 @@
     <ClInclude Include="Client_Structs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="FileManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Somecpp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FileManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
