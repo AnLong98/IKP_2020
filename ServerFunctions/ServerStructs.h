@@ -38,7 +38,7 @@ typedef struct CLIENT_INFO
 {
 	SOCKET clientSocket;
 	SOCKADDR_IN clientAddress;
-	FILE_DATA* clientOwnedFiles;
+	char** clientOwnedFiles;
 	unsigned int fileDataArraySize;
 	unsigned int ownedFilesCount;
 }C_INFO;
@@ -57,7 +57,6 @@ typedef struct SERVER_THREAD_DATA
 	LinkedList<SOCKET>* acceptedSocketsArray;
 	HANDLE* FinishSignal;
 	HANDLE* FullQueue;
-	CRITICAL_SECTION* AcceptedSocketsAccess;
 	CRITICAL_SECTION* LoadingFilesAccess;
 	int* serverWorking;
 }S_DATA;

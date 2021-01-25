@@ -19,14 +19,14 @@ void DeleteClientInfoHandle();
 /*
 	Adds informations about client and new file part assigned to him into hash map.
 	socket - Client socket pointer
-	data - Data about file client requested
+	fileName - Name of new client owned file
 	clientAddress - Client listen socket address
 	clientInformationsMap - Hash map containing client informations, mapping socket address as key
 
 	Returns 0 if successfull, -2 if library handle not initialized.
 	THREAD SAFE
 */
-int AddClientInfo(SOCKET socket, FILE_DATA data, SOCKADDR_IN clientAddress, HashMap<CLIENT_INFO>* clientInformationsMap);
+int AddClientInfo(SOCKET socket, char* fileName, SOCKADDR_IN clientAddress, HashMap<CLIENT_INFO>* clientInformationsMap);
 
 /*
 	Removes informations about client and his file parts from hash map.

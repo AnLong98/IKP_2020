@@ -8,7 +8,7 @@
 #define HASH_MAP_FULL_TEST 4
 #define LIST_TEST_THREADS 50
 #define MAP_TEST_THREADS 50
-#define OPERATIONS_PER_THREAD 2000
+#define OPERATIONS_PER_THREAD 100
 
 #include <iostream>
 #include <string>

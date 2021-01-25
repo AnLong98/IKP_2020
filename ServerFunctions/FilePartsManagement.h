@@ -47,30 +47,31 @@ int AssignFilePartToClient(SOCKADDR_IN clientInfo, char* fileName, HashMap<FILE_
 	clientInfo - Client listen socket address.
 	fileName - File name.
 	fileInfoMap - Hash map which stores informations about clients.
-	fileDataArray - Array of client owned file data.
+	info - Client's information.
 	filePartsCount - Number of client owned parts.
 
 	Returns 0 if OK, -1 if out of memory and -2 if library handle not initialized.
 
 	THREAD SAFE
 */
-int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, FILE_DATA* fileDataArray, unsigned int filePartsCount);
+int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, CLIENT_INFO info, unsigned int filePartsCount);
 
 /*
 	Packs file response about existing loaded file. Assigns file part to client requester.
 
 	response - Pointer to file response struct in which response will be packed
-	fileData - Loaded file data
+	fileName - Loaded file name
 	request -  Client's file request
 	serverOwnedParts - Array of server owned part indexes which will be set
 	fileInfoMap - Hash map of file info
+	partsToSendCopy - Array in which to store copies of file parts 
 
 	Returns 0 if successfull, -1 if out of memory.
 
 	THREAD SAFE
 
 */
-int PackExistingFileResponse(FILE_RESPONSE* response, FILE_DATA fileData, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap);
+int PackExistingFileResponse(FILE_RESPONSE* response, const char* fileName, FILE_REQUEST request, int* serverOwnedParts, HashMap<FILE_DATA>* fileInfoMap, FILE_PART* partsToSendCopy);
 
 /*
 	Unloads all loaded files from memory and unassigns all asigned file parts.

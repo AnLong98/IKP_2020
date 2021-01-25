@@ -208,40 +208,55 @@ void HashMap<T>::Insert(const char* key, T value)
 
 	EnterCriticalSection(&MapCS);
 	int index = hashValue % this->size;
-	if (nodes[index].key == nullptr) //If primary node is ok, place value and key there
+	if (nodes[index].key == nullptr) //If primary node is empty, place value and key there
 	{
 		nodes[index].key = (char*)malloc((strlen(key) + 3) * sizeof(char));
 		strcpy_s(nodes[index].key, strlen(key) + 1, key);
 		nodes[index].value = value;
 		countUnique++;
 		LeaveCriticalSection(&MapCS);
+		
+		return;
+	}
+	else if (strcmp(nodes[index].key, key) == 0)//Rewrite primary node value
+	{
+		nodes[index].value = value;
+		LeaveCriticalSection(&MapCS);
 		return;
 	}
 	else //Collission happened, chain new element
 	{
 		HashMapNode<T>* node = nodes + index;
-		while ((node->next) != nullptr)
+		HashMapNode<T>* nodeNext = node->next;
+		while(true)
 		{
-			if (strcmp(node->key, key) == 0) //Replace existing
+			if (nodeNext != nullptr)
 			{
-				node->value = value;
-				LeaveCriticalSection(&MapCS);
-				return;
+				if (strcmp(nodeNext->key, key) == 0) //Replace existing
+				{
+					nodeNext->value = value;
+					LeaveCriticalSection(&MapCS);
+					return;
+				}
+
+			}
+			else
+			{
+				break;
 			}
 			node = node->next;
+			nodeNext = nodeNext->next;
 		}
 
 		//Add new
 		{
 			char* keyCopy = _strdup(key);
-			printf("\nKey copy %s", keyCopy);
 			HashMapNode<T>* newNode = new HashMapNode<T>(keyCopy, value);
 			node->next = newNode;
 			countUnique++;
 			free(keyCopy);
 		}
 	}
-
 	LeaveCriticalSection(&MapCS);
 	return;
 }
