@@ -244,8 +244,15 @@ int  main(void)
 				int setSocketsCount = CheckSetSockets(&acceptedSockets, &readfds, &incomingRequestsQueue, &processingSocketsMap);
 				if (setSocketsCount > 0)
 				{
-					printf("\n%d requests arrived.", setSocketsCount);
-					ReleaseSemaphore(FullQueue, setSocketsCount, NULL);
+					printf("\n%d requests arrived.", setSocketsCount); 
+					int socketsSignaled = 0;
+					for (int i = 0; i < setSocketsCount; i++)
+					{
+						while (!ReleaseSemaphore(FullQueue, 1, NULL))
+						{
+							Sleep(200);
+						}
+					}
 				}
 
 
