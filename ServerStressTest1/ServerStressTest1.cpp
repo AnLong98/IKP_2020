@@ -7,7 +7,7 @@
 #include <conio.h>
 #define REQUESTS_PER_THREAD 20
 #define TEST_FILE_COUNT 4
-#define STRES_TEST_THREADS 15
+#define STRES_TEST_THREADS 30
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
 #include "../PeerToPeerFileTransferFunctions/P2PFTP.h"
