@@ -32,8 +32,9 @@ int ShutdownConnection(SOCKET socket);
 	listenSocket - socket from which connection request will be accepted
 
 	Returns 0 if successful, otherwise returns -1
+	THREAD SAFE
 */
-// THREAD UNSAFE
+
 int AcceptIncomingConnection(LinkedList<SOCKET>* socketsList, SOCKET listenSocket);
 
 /*
@@ -42,8 +43,8 @@ int AcceptIncomingConnection(LinkedList<SOCKET>* socketsList, SOCKET listenSocke
 	socket - Socket to remove
 
 	Returns 0 if successful, otherwise returns -1
+	THREAD SAFE
 */
-// THREAD UNSAFE
 int RemoveSocketFromArray(LinkedList<SOCKET>* socketsList, SOCKET socket);
 
 /*
@@ -53,6 +54,7 @@ int RemoveSocketFromArray(LinkedList<SOCKET>* socketsList, SOCKET socket);
 	socketsCount - pointer in which to store number of sockets in list
 
 	Returns NULL if empty
+	THREAD SAFE
 */
 SOCKET* GetAllSockets(LinkedList<SOCKET>* socketsArray, int* socketsCount);
 
@@ -64,8 +66,9 @@ SOCKET* GetAllSockets(LinkedList<SOCKET>* socketsArray, int* socketsCount);
 	processingSocketsMap - Map in which to place set sockets.
 
 	Returns number of set sockets or -1 in case of failiure
+	THREAD SAFE
 */
-// THREAD UNSAFE
+
 int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCKET>* communicationQueue, HashMap<SOCKET>* processingSocketsMap);
 
 /*
@@ -76,7 +79,7 @@ int CheckSetSockets(LinkedList<SOCKET>* socketsList, fd_set* readfds, Queue<SOCK
 
 	Returns number of disconnected sockets
 
-	THREAD UNSAFE
+	THREAD SAFE
 */
 int DisconnectBrokenSockets(LinkedList<SOCKET>* socketsList);
 
@@ -87,7 +90,7 @@ int DisconnectBrokenSockets(LinkedList<SOCKET>* socketsList);
 
 	Returns 1 if broken, 0 if not broken
 
-	THREAD UNSAFE
+	THREAD SAFE
 */
 int IsSocketBroken(SOCKET s);
 

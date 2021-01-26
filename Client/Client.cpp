@@ -76,6 +76,7 @@ int main()
 	//SOCKET connectSocket = INVALID_SOCKET;
 	listenSocket = INVALID_SOCKET;
 	int iResult;
+	InitConnectionsHandle();
 
 	fd_set readfds;
 	unsigned long mode = 1;
