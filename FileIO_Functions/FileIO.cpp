@@ -45,7 +45,8 @@ int WriteFileIntoMemory(char* fileName, char* allocatedBufferPointer, size_t siz
 	{
 		return -1;
 	}
-	size_t bytesWritten = fwrite(allocatedBufferPointer, size, 1, pFile);
+	size_t bytesWritten = 0;
+	bytesWritten += fwrite(allocatedBufferPointer, size, 1, pFile);
 
 	fclose(pFile);
 	if (bytesWritten != size)
