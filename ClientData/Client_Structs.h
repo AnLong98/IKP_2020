@@ -34,4 +34,14 @@ typedef struct CLIENT_FILE_PART
 
 }C_FILE_PART;
 
+typedef struct OUT_THREAD_STRUCT
+{
+
+};
+
+typedef struct INC_THREAD_STRUCT
+{
+
+};
+
 #endif
