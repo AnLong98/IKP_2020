@@ -25,7 +25,7 @@ int ShutdownConnection(SOCKET socket)
 		closesocket(socket);
 		return -1;
 	}
-	//closesocket(socket);
+	closesocket(socket);
 	return 0;
 }
 

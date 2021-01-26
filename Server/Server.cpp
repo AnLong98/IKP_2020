@@ -200,11 +200,11 @@ int  main(void)
 			socketsTaken = socketsCount;
 			for (int i = 0; i < socketsCount; i++)
 			{
-				/*//Convert socket to string to use as key
+				//Convert socket to string to use as key
 				char socketBuffer[SOCKET_BUFFER_SIZE];
 				sprintf_s(socketBuffer, "%d", sockets[i]);
 
-				if(!processingSocketsMap.DoesKeyExist(socketBuffer))*/
+				if(!processingSocketsMap.DoesKeyExist(socketBuffer))
 					FD_SET(sockets[i], &readfds);
 			}
 
@@ -483,10 +483,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 				*serverWorking = 0;
 			}
 			printf("\nRemoved client!");
+			processingSocketsMap->Delete((const char*)(socketBuffer));
 			continue;
 		}
 
-		int sockERR = 0;
+		
 		for (int i = 0; i < (int)fileResponse.serverPartsNumber; i++)
 		{
 			int partIndex = serverOwnedParts[i];
@@ -511,13 +512,11 @@ DWORD WINAPI ProcessIncomingFileRequest(LPVOID param)
 					*serverWorking = 0;
 				}
 				printf("\nRemoved client!");
-				sockERR = 1;
-				break;
+				processingSocketsMap->Delete((const char*)(socketBuffer));
+				continue;
 			}
 		}
-		if (sockERR == 1) {
-			continue; //Skip processing as socket was compromised
-		}
+
 		if (isAssignedWithPart == 0)
 		{
 			if (AssignFilePartToClient(fileRequest.requesterListenAddress, fileRequest.fileName, fileInfoMap) < 0)

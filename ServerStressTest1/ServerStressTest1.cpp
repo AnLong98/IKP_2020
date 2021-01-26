@@ -152,6 +152,7 @@ DWORD WINAPI RequestSender(LPVOID params)
 				return 1;
 			}
 			free(part);
+			part = NULL;
 		}
 		shutdown(connectSocket, SD_BOTH);
 		closesocket(connectSocket);
