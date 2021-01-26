@@ -1,56 +1,90 @@
-/*#include "../ClientData/FileManager.h"
-#include <list>
+#include "../ClientData/FileManager.h"
+#include "../FileIO_Functions/FileIO.h"
+#include <direct.h>
 
-using namespace std;
-
-//pravim fju koja stavlja delic u wholefile
-//zbog kriticnih sekcija
 
 CRITICAL_SECTION FilePartAccess;
 int isInitFileManagerHandle = 0;
 
 CRITICAL_SECTION WholeFileAccess;
-int isInitFileManagerHandle2 = 0;
+int isInitWholeFileManagerHandle = 0;
 
-void InitFileManagementHandle()
+void InitFileAcessManagementHandle()
 {
 	InitializeCriticalSection(&FilePartAccess);
 	isInitFileManagerHandle = 1;
 }
 
-void DeleteFileManagementHandle()
+void DeleteFileAccessManagementHandle()
 {
 	DeleteCriticalSection(&FilePartAccess);
 	isInitFileManagerHandle = 0;
 }
 
-void InitFileManagementHandle()
+void InitWholeFileManagementHandle()
 {
 	InitializeCriticalSection(&WholeFileAccess);
-	isInitFileManagerHandle2 = 1;
+	isInitWholeFileManagerHandle = 1;
 }
 
-void DeleteFileManagementHandle()
+void DeleteWholeFileManagementHandle()
 {
 	DeleteCriticalSection(&WholeFileAccess);
-	isInitFileManagerHandle2 = 0;
+	isInitWholeFileManagerHandle = 0;
 }
 
-int HandleRecievedFilePart(CLIENT_FILE_PART_INFO* filePartInfo, CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int length, int partNumber)
+int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPONSE response)
+{
+	if(!isInitWholeFileManagerHandle)
+		return -2;
+
+	EnterCriticalSection(&WholeFileAccess);
+	memset(wholeFile, 0, sizeof(wholeFile));
+	strcpy(wholeFile->fileName, fileName);
+
+	//part to store
+	wholeFile->filePartToStore = response.filePartToStore;
+	wholeFile->fileSize = response.fileSize;
+
+	unsigned int fileSize = response.fileSize;
+
+	wholeFile->bufferPointer = (char*)calloc(fileSize, sizeof(char));
+	LeaveCriticalSection(&WholeFileAccess);
+	
+	return 1;
+}
+
+void ResetWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile)
+{
+	EnterCriticalSection(&WholeFileAccess);
+	free(wholeFile->bufferPointer);
+	wholeFile->bufferPointer = NULL;
+	wholeFile->partsDownloaded = 0;
+	wholeFile->fileSize = 0;
+	LeaveCriticalSection(&WholeFileAccess);
+}
+
+int HandleRecievedFilePart(CLIENT_FILE_PART_INFO* filePartInfo, CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int length, int partNumber, LinkedList<CLIENT_FILE_PART_INFO>* fileParts)
 {
 
 	if (!isInitFileManagerHandle)
 		return -2;
 
+	if (!isInitWholeFileManagerHandle)
+		return -2;
+
 	bool savePart = true;
 
 	EnterCriticalSection(&FilePartAccess);
-	list<CLIENT_FILE_PART_INFO>::iterator it;
-	for (it = fileParts.begin(); it != fileParts.end(); ++it) {
-		if (strcmp(it->filename, wholeFile->fileName) == 0)
+	ListNode<CLIENT_FILE_PART_INFO>* nodeFront = fileParts->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
+	{
+		if (strcmp(nodeFront->GetValue().filename, wholeFile->fileName) == 0)
 		{
 			savePart = false;
 		}
+		
+		nodeFront = nodeFront->Next();
 	}
 	LeaveCriticalSection(&FilePartAccess);
 
@@ -62,7 +96,7 @@ int HandleRecievedFilePart(CLIENT_FILE_PART_INFO* filePartInfo, CLIENT_DOWNLOADI
 		filePartInfo->lenght = length;
 
 		EnterCriticalSection(&FilePartAccess);
-		fileParts.push_back(*filePartInfo); //ovde iskoristiti listu sto napravimo mi.
+		fileParts->PushBack(*filePartInfo); //ovde iskoristiti listu sto napravimo mi.
 		LeaveCriticalSection(&FilePartAccess);
 	}
 
@@ -80,6 +114,8 @@ int HandleRecievedFilePart(CLIENT_FILE_PART_INFO* filePartInfo, CLIENT_DOWNLOADI
 	}
 	wholeFile->partsDownloaded++;
 	LeaveCriticalSection(&WholeFileAccess);
+
+	return 1;
 }
 
 void WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
@@ -93,4 +129,23 @@ void WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
 	WriteFileIntoMemory(filePath, wholeFile.bufferPointer, strlen(wholeFile.bufferPointer));
 	free(filePath);
 	filePath = NULL;
-}*/
+}
+
+void FindFilePart(LinkedList<CLIENT_FILE_PART_INFO>* fileParts, CLIENT_FILE_PART_INFO* partToSend, char fileName[])
+{
+	EnterCriticalSection(&FilePartAccess);
+	ListNode<CLIENT_FILE_PART_INFO>* nodeFront = fileParts->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
+	{
+		if (strcmp(nodeFront->GetValue().filename, fileName) == 0)
+		{
+			strcpy(partToSend->filename, nodeFront->GetValue().filename);
+			partToSend->lenght = nodeFront->GetValue().lenght;
+			partToSend->partBuffer = (char*)malloc(sizeof(char)*partToSend->lenght);
+			strcpy(partToSend->partBuffer, nodeFront->GetValue().partBuffer); // access violation
+		}
+
+		nodeFront = nodeFront->Next();
+	}
+	LeaveCriticalSection(&FilePartAccess);
+}
