@@ -1,5 +1,6 @@
 #include "../FileIO_Functions/FileIO.h"
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
 int ReadFileIntoMemory(char* fileName, char** unallocatedBufferPointer, size_t* size)
@@ -45,8 +46,7 @@ int WriteFileIntoMemory(char* fileName, char* allocatedBufferPointer, size_t siz
 	{
 		return -1;
 	}
-	size_t bytesWritten = 0;
-	bytesWritten += fwrite(allocatedBufferPointer, size, 1, pFile);
+	size_t bytesWritten = fwrite(allocatedBufferPointer, sizeof(char), strlen(allocatedBufferPointer), pFile);
 
 	fclose(pFile);
 	if (bytesWritten != size)

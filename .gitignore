@@ -270,3 +270,11 @@ __pycache__/
 /Server/Test1MB.txt
 /Server/Test100MB.txt
 /Server/Test300MB.txt
+/Client/127.0.0.1-15553/Test100KB.txt
+/Client/127.0.0.1-23746/Test100KB.txt
+/Client/127.0.0.1-57283/Test100KB.txt
+/Client/127.0.0.1-19394/Test100KB.txt
+/Client/127.0.0.1-60866/Test100KB.txt
+/Client/127.0.0.1-60611/Test100KB.txt
+/Client/127.0.0.1-60396/Test100KB.txt
+/Client/127.0.0.1-10733/Test100KB.txt
