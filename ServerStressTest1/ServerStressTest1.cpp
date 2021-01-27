@@ -28,10 +28,10 @@ int main()
 
 	//Array of server test file names
 	const char * testFiles[] = {
-	"Test100KB.txt",
-	"Test1MB.txt",
-	"Test100MB.txt",
-	"Test300MB.txt",
+	"TestASCII1.txt",
+	"TestASCII2.txt",
+	"TestASCII3.txt",
+	"TestASCII4.txt",
 	};
 
 	if (InitializeWindowsSockets() == false)
