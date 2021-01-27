@@ -15,7 +15,7 @@ typedef struct CLIENT_FILE_PART_INFO
 {
 	char filename[MAX_FILE_NAME]; 
 	char* partBuffer;
-	unsigned int lenght;
+	unsigned int length;
 }C_FILE_PART_INFO;
 
 /*

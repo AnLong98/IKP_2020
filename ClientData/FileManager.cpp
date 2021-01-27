@@ -52,7 +52,7 @@ int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPO
 	wholeFile->bufferPointer = (char*)malloc((fileSize + 1) * sizeof(char));
 	LeaveCriticalSection(&WholeFileAccess);
 	
-	return 1;
+	return 0;
 }
 
 void ResetWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile)
@@ -96,7 +96,7 @@ int HandleRecievedFilePart(CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int l
 		strcpy(filePartInfo.filename, wholeFile->fileName);
 		filePartInfo.partBuffer = (char*)malloc((length + 1) * sizeof(char));
 		strcpy_s(filePartInfo.partBuffer, length + 1, data);
-		filePartInfo.lenght = length;
+		filePartInfo.length = length;
 
 		EnterCriticalSection(&FilePartAccess);
 		fileParts->PushBack(filePartInfo);
@@ -111,11 +111,12 @@ int HandleRecievedFilePart(CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int l
 	else
 	{
 		memcpy(wholeFile->bufferPointer + wholeFile->fileSize - length, data, length);
+		wholeFile->bufferPointer[wholeFile->fileSize] = '\0';
 	}
 	(wholeFile->partsDownloaded)++;
 	LeaveCriticalSection(&WholeFileAccess);
 
-	return 1;
+	return 0;
 }
 
 int WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
@@ -125,14 +126,14 @@ int WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
 	strcpy_s(filePath, strlen(dirName) + 1, dirName);
 	strcat(filePath, "/");
 	strcat(filePath, wholeFile.fileName);
-	WriteFileIntoMemory(filePath, wholeFile.bufferPointer, wholeFile.fileSize);
-	/*if (WriteFileIntoMemory(filePath, wholeFile.bufferPointer, wholeFile.fileSize) != 0)
+
+	if (WriteFileIntoMemory(filePath, wholeFile.bufferPointer, wholeFile.fileSize) != 0)
 	{
 		free(filePath);
 		filePath = NULL;
 		return -1;
 	}
-	*/
+	
 	free(filePath);
 	filePath = NULL;
 
@@ -142,6 +143,9 @@ int WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
 //int, da znamo da li smo nasli taj deo ili ne . i proveriti u kliijentu da li postoji taj delic
 int FindFilePart(LinkedList<CLIENT_FILE_PART_INFO>* fileParts, CLIENT_FILE_PART_INFO* partToSend, char fileName[])
 {
+	if (!isInitFileManagerHandle)
+		return -2;
+
 	EnterCriticalSection(&FilePartAccess);
 	ListNode<CLIENT_FILE_PART_INFO>* nodeFront = fileParts->AcquireIteratorNodeFront();
 	while (nodeFront != nullptr)
@@ -149,9 +153,9 @@ int FindFilePart(LinkedList<CLIENT_FILE_PART_INFO>* fileParts, CLIENT_FILE_PART_
 		if (strcmp(nodeFront->GetValue().filename, fileName) == 0)
 		{
 			strcpy(partToSend->filename, nodeFront->GetValue().filename);
-			partToSend->lenght = nodeFront->GetValue().lenght;
-			partToSend->partBuffer = (char*)malloc(sizeof(char)*(partToSend->lenght + 1));
-			strcpy_s(partToSend->partBuffer,partToSend->lenght + 1 , nodeFront->GetValue().partBuffer); // access violation
+			partToSend->length = nodeFront->GetValue().length;
+			partToSend->partBuffer = (char*)malloc(sizeof(char)*(partToSend->length + 1));
+			strcpy_s(partToSend->partBuffer,partToSend->length + 1 , nodeFront->GetValue().partBuffer); // access violation
 			LeaveCriticalSection(&FilePartAccess);
 			return 0;
 		}

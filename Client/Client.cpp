@@ -2,8 +2,6 @@
 //
 
 #pragma comment(lib, "Ws2_32.lib")
-#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
-#define _CRT_SECURE_NO_WARNINGS 1
 #include <stdio.h>
 #include <ws2tcpip.h>
 #include <stdlib.h>
@@ -19,6 +17,9 @@
 #include "../ClientData/Client_Structs.h"
 #include "../ClientData/FileManager.h"
 #include "../FTPServerFunctions/ConnectionFuncs.h"
+
+#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
+#define _CRT_SECURE_NO_WARNINGS 1
 #define SOCKET_BUFFER_SIZE 20
 #define DEFAULT_PORT 27016
 #define SERVER_ADDRESS "127.0.0.1"
@@ -53,6 +54,7 @@ int main(void)
 		//Common data
 		HANDLE FinishSignal;						  //Semaphore for signalizing abort to threads.
 		LinkedList<CLIENT_FILE_PART_INFO> fileParts;  //LinkedList where we store parts that we need to provide to other clients.
+		
 		LinkedList<SOCKET> acceptedSockets;
 		int socketsTaken = 0;
 
@@ -61,8 +63,6 @@ int main(void)
 			return 1;
 		}
 
-
-		//SOCKET connectSocket = INVALID_SOCKET;
 		listenSocket = INVALID_SOCKET;
 		int iResult;
 
@@ -76,7 +76,6 @@ int main(void)
 		hints.ai_socktype = SOCK_STREAM;
 		hints.ai_protocol = IPPROTO_TCP;
 		hints.ai_flags = AI_PASSIVE;
-
 
 		iResult = getaddrinfo(NULL, "0", &hints, &resultingAddress);
 		if (iResult != 0)
@@ -108,18 +107,15 @@ int main(void)
 
 		freeaddrinfo(resultingAddress);
 
-
 		HANDLE servProc = NULL;
 		DWORD servProcID;
 
 		HANDLE processors[CLIENT_THREADS] = { NULL };
 		DWORD processorIDs[CLIENT_THREADS];
 
-		//stavljam da tri niti rade sa OutReqQueue
 		EmptyOutgoingQueue = CreateSemaphore(0, OUT_QUEUE_THREADS, OUT_QUEUE_THREADS, NULL);
 		FullOutgoingQueue = CreateSemaphore(0, 0, OUT_QUEUE_THREADS, NULL);
 
-		//stavljam da dve niti rade sa IncReqQueue
 		FullIncomingQueue = CreateSemaphore(0, 0, INC_QUEUE_THREADS, NULL);
 
 		FinishSignal = CreateSemaphore(0, 0, ALL_THREADS, NULL);
@@ -144,7 +140,6 @@ int main(void)
 			incThreadData.processingSocketsMap = &processingSocketsMap;
 			incThreadData.FinishSignal = &FinishSignal;
 			incThreadData.FullIncomingQueue = &FullIncomingQueue;
-
 
 			for (int i = 0; i < OUT_QUEUE_THREADS; i++)
 			{
@@ -177,16 +172,11 @@ int main(void)
 			}
 		}
 
-		//Init critical sections
+		//Init handles
 		InitConnectionsHandle();
 		InitWholeFileManagementHandle();
 		InitFileAcessManagementHandle();
-		/*
-		if (InitializeWindowsSockets() == false)
-		{
-			return 1;
-		}
-		*/
+
 		iResult = ioctlsocket(listenSocket, FIONBIO, &mode);
 		if (iResult != NO_ERROR)
 		{
@@ -211,7 +201,7 @@ int main(void)
 			printf("getsockname() failed.\n"); return -1;
 		}
 
-
+		//Creating thread for communication with server
 		servProc = CreateThread(NULL, 0, &ProcessConnectionToServer, (LPVOID)&outServerThreadData, 0, &servProcID);
 
 		if (!servProc)
@@ -242,9 +232,17 @@ int main(void)
 			int socketsCount = 0;
 			SOCKET *sockets = GetAllSockets(&acceptedSockets, &socketsCount);
 			socketsTaken = socketsCount;
+
 			for (int i = 0; i < socketsTaken; i++)
 			{
-				FD_SET(sockets[i], &readfds);
+				//Convert socket to string to use as key
+				char socketBuffer[SOCKET_BUFFER_SIZE];
+				sprintf_s(socketBuffer, "%d", sockets[i]);
+
+				if (!processingSocketsMap.DoesKeyExist(socketBuffer))
+					FD_SET(sockets[i], &readfds);
+
+				//FD_SET(sockets[i], &readfds); ovde sam imao umesto ovog gore, samo ovu jednu liniju koda. Da nam nije zbog toga pucalo onda?
 			}
 
 			if (sockets != NULL)
@@ -268,7 +266,7 @@ int main(void)
 			}
 			else
 			{
-				if (FD_ISSET(listenSocket, &readfds) && socketsTaken < MAX_CLIENTS)
+				if (FD_ISSET(listenSocket, &readfds)/* && socketsTaken < MAX_CLIENTS*/)//neograniceno klijenata
 				{
 					if (AcceptIncomingConnection(&acceptedSockets, listenSocket) == 0)
 					{
@@ -298,7 +296,9 @@ int main(void)
 
 			}
 		}
+
 		printf("\nClient is not listening any more");
+
 		for (int i = 0; i < CLIENT_THREADS; i++)
 			WaitForSingleObject(processors[i], 2000);
 
@@ -326,15 +326,18 @@ int main(void)
 		if (sockets != NULL)
 			free(sockets);
 
+
 		// cleanup
 		closesocket(listenSocket);
 		WSACleanup();
 
+		//ClearFilePartsLinkedList(&fileParts); //need to be implemented. free LinkedList fileParts !
+
 		DeleteWholeFileManagementHandle();
 		DeleteFileAccessManagementHandle();
 		DeleteConnectionsHandle();
-		
 	}
+
 	printf("\nPress any key to close");
 	_getch();
 	return 0;
@@ -349,6 +352,7 @@ bool InitializeWindowsSockets()
 		printf("WSAStartup failed with error: %d\n", WSAGetLastError());
 		return false;
 	}
+
 	return true;
 }
 
@@ -360,7 +364,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 	SOCKET* listenSocket = outServerThreadData.listenSocket;
 	CLIENT_DOWNLOADING_FILE* wholeFile = outServerThreadData.wholeFile;
 	LinkedList<CLIENT_FILE_PART_INFO>* fileParts = outServerThreadData.fileParts;
-
 
 	SOCKET connectSocket = INVALID_SOCKET;
 
@@ -378,6 +381,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 	InetPton(AF_INET, TEXT(SERVER_ADDRESS), &serverAddress.sin_addr.s_addr);
 	serverAddress.sin_port = htons(DEFAULT_PORT);
 
+	//Conect to server
 	if (connect(connectSocket, (SOCKADDR*)&serverAddress, sizeof(serverAddress)) == SOCKET_ERROR)
 	{
 		printf("Unable to connect to server.\n");
@@ -409,18 +413,20 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		printf("\n\n--------PORT-----------");
 		printf("%d\n\n", socketAddress.sin_port);
 
-
+		//Sending request for file to server
 		if (SendFileRequest(connectSocket, file) == -1)
 		{
 			ShutdownConnection(connectSocket);
 			ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
 			printf("\nSendFileRequest return an error. Releasing semaphores.");
+			break;
 		}
 
 		printf("\nFiles sent to server. Waiting for response...");
 
 		FILE_RESPONSE response;
 
+		//Recive response from server
 		if (RecvFileResponse(connectSocket, &response) == -1)
 		{
 			ShutdownConnection(connectSocket);
@@ -434,7 +440,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 
 		CLIENT_FILE_PART clientFilePart;
 
-		//cim smo primili response od servera, stavljamo sve na outReqQueue
+		//Activating thread if parts need to be taken from other clients
 		for (int i = 0; i < (int)response.clientPartsNumber; i++)
 		{
 			const int semaphoreNum = 2;
@@ -454,17 +460,15 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 				ReleaseSemaphore(*(outServerThreadData.FullOutgoingQueue), 1, NULL);
 				printf("\nFullOutQueue released");
 			}
-
 		}
 
-		//delic koji cuvam za ostale klijente, stavljam ga u listu
 		CLIENT_FILE_PART_INFO part;
+
 		char* data = NULL;
 		unsigned int length;
 		int partNumber;
 
-
-		// primam sada delove koje server ima kod sebe
+		// Recive file parts from server
 		for (int i = 0; i < (int)response.serverPartsNumber; i++)
 		{
 			if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1)
@@ -474,37 +478,37 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 				ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
 			}
 
-			//upisujemo u listu delice koje treba da cuvamo, to isto mogu da rade i druge niti
 			HandleRecievedFilePart(wholeFile, data, length, partNumber, fileParts);
 
 			free(data);
 			data = NULL;
 		}
 
-		//proveravam da li mi je mozda server poslao sve delice
+		//Wait for all parts to be downloaded
 		while (wholeFile->partsDownloaded != FILE_PARTS)
 		{
 			Sleep(500);
 		}
 
-
+		//Save file to disk
 		char ip[] = "127.0.0.1-";
 		char port[10];
 		sprintf(port, "%d", socketAddress.sin_port);
+
 		char* dirName = (char*)malloc(strlen(ip) + strlen(port) + 2);
 		strcpy_s(dirName,strlen(ip) + 1, ip);
 		strcat(dirName, port);
 
 		if (WriteWholeFileIntoMemory(dirName, *wholeFile) != 0)
 		{
-			printf("\nCouldn't write buffer into memory."); //koji jos hendle baciti ovde ? 
+			printf("\nCouldn't write buffer into memory."); //koji jos hendle baciti ovde, mislim da je okej da se izvrsi ovo dole i da mu dozvolimo da opet upise fajl koji zeli 
 		}
 
 		free(dirName);
 		dirName = NULL;
-		ResetWholeFile(wholeFile); //unutra ne treba kriticna sekcija.
-
+		ResetWholeFile(wholeFile); //unutra ne treba kriticna sekcija. proveriti?????? 
 	}
+
 	printf("\nNit za komunikaciju sa serverom je odradila svoj deo posla...");
 	return 0;
 }
@@ -581,7 +585,6 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 			printf("getsockname() failed.\n"); return -1;
 		}
 
-		//pravimo delic koji treba da sacuvamo u listi da bi slali drugim klijentima
 		CLIENT_FILE_PART_INFO filePartInfo;
 
 		HandleRecievedFilePart(wholeFile, data, length, partNumber, fileParts);
@@ -591,7 +594,6 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 
 		ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
 		printf("\nReleased EmptyOutgoingQueue.");
-
 	}
 
 	return 0;
@@ -621,6 +623,7 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 
 		FILE_PART_REQUEST partRequest;
 
+		//Recieve file part request
 		int iResult = RecvFilePartRequest(requestSocket, &partRequest);
 		if (iResult == -1)
 		{
@@ -631,33 +634,30 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 
 		CLIENT_FILE_PART_INFO partToSend;
 
-		//FindFilePart(&fileParts, &partToSend, partRequest.fileName);
-		int partNumber = 0;
-		printf("\n----Udjem ovde-----\n");
 
+		int partNumber = 0;
+
+		//Trying to find file part
 		if (FindFilePart(fileParts, &partToSend, partRequest.fileName) != 0)
 		{
 			printf("\nCouldn't find filePart.");
 			partToSend.partBuffer = (char*)malloc(sizeof(char) * 11);
 			strcpy_s(partToSend.partBuffer, 11, "FailedFind");
-			partToSend.lenght = 11;
+			partToSend.length = 11;
 			partNumber = -1;
 		}
 		else
 		{
 			partNumber = partRequest.partNumber;
 		}
-		printf("\n-----Prosam sam - udjem ovde- ispred SEND FILE PART-A SAM.-------\n");
 
-		//part number -1 ako delic ne poostoji u linked listi.
-		//part buffer popuniti sa necim ,bilo cim, string i njeova duzina u length
-		if (SendFilePart(requestSocket, partToSend.partBuffer, partToSend.lenght, partNumber) == -1)
+		//Sending file part to client
+		if (SendFilePart(requestSocket, partToSend.partBuffer, partToSend.length, partNumber) == -1)
 		{
 			printf("\nGreska u FullIncQueue prilikom slanja dela sa klijenta - klijentu.");
 			ShutdownConnection(requestSocket);
 			ReleaseSemaphore(*(incThreadData.FinishSignal), ALL_THREADS, NULL);
 		}
-
 
 		free(partToSend.partBuffer);
 
