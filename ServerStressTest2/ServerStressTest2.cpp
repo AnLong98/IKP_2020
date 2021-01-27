@@ -1,5 +1,4 @@
-// ServerStressTest1.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
+// ServerStressTest2.cpp : This file contains the 'main' function. Program execution begins and ends there.
 #pragma comment(lib, "Ws2_32.lib")
 #include <ws2tcpip.h>
 #include <stdlib.h>
@@ -28,10 +27,10 @@ int main()
 
 	//Array of server test file names
 	const char * testFiles[] = {
-	"Test100KB.txt",
-	"Test1MB.txt",
-	"Test100MB.txt",
-	"Test300MB.txt",
+	"TestASCII1.txt",
+	"TestASCII2.txt",
+	"TestASCII3.txt",
+	"TestASCII4.txt",
 	};
 
 	if (InitializeWindowsSockets() == false)
@@ -42,7 +41,7 @@ int main()
 
 	for (int i = 0; i < STRES_TEST_THREADS; i++)
 	{
-		TEST_REQUEST_SENDER_DATA* threadData =  (TEST_REQUEST_SENDER_DATA*) malloc(sizeof(TEST_REQUEST_SENDER_DATA));
+		TEST_REQUEST_SENDER_DATA* threadData = (TEST_REQUEST_SENDER_DATA*)malloc(sizeof(TEST_REQUEST_SENDER_DATA));
 		threadData->firstPortNumber = firstPortNumber;
 		threadData->lastPortNumber = firstPortNumber + REQUESTS_PER_THREAD;
 		threadData->testFileCount = TEST_FILE_COUNT;
@@ -52,7 +51,7 @@ int main()
 		processors[i] = CreateThread(NULL, 0, &RequestSender, (LPVOID)threadData, 0, processorIDs + i);
 		firstPortNumber += REQUESTS_PER_THREAD + 1;
 	}
-		
+
 
 	for (int i = 0; i < STRES_TEST_THREADS; i++)
 	{
@@ -118,7 +117,7 @@ DWORD WINAPI RequestSender(LPVOID params)
 		FILE_REQUEST file;
 		file.requesterListenAddress = socketAddress;
 
-		int fileIndex = i % (TEST_FILE_COUNT);
+		int fileIndex = rand() % (TEST_FILE_COUNT);
 		strcpy_s(file.fileName, strlen(data.testFileNames[fileIndex]) + 1, data.testFileNames[fileIndex]);
 
 		if (SendFileRequest(connectSocket, file) == -1)
@@ -147,17 +146,19 @@ DWORD WINAPI RequestSender(LPVOID params)
 		{
 			if (RecvFilePart(connectSocket, &part, &length, &partNumber) == -1)
 			{
-				printf("\nCouldn't receive part %d form server. %ld", partNumber,  WSAGetLastError());
+				printf("\nCouldn't receive part %d form server. %ld", partNumber, WSAGetLastError());
 				closesocket(connectSocket);
 				return 1;
 			}
 			free(part);
 			part = NULL;
 		}
+
+		Sleep(5000);
 		shutdown(connectSocket, SD_BOTH);
 		closesocket(connectSocket);
 		connectSocket = INVALID_SOCKET;
-		
+
 	}
 	free((TEST_REQUEST_SENDER_DATA*)params);
 	printf("\nThread finished working");

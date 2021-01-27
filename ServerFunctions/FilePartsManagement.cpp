@@ -178,26 +178,8 @@ int UnassignFileParts(SOCKADDR_IN clientInfo, HashMap<FILE_DATA>* fileInfoMap, C
 			}
 		}
 
-		//if (!isShifted)
-		//{
-			//fileData.filePartDataArray[filePartToShift].isServerOnly = 1;
-			fileData.filePartDataArray[clientPartIndex].isServerOnly = 1;
-		//}
-		/*else
-		{
+		fileData.filePartDataArray[clientPartIndex].isServerOnly = 1;
 
-		}
-		
-		//Shift back only if client's part is not among first 10 parts
-		if (clientPartIndex >= FILE_PARTS)
-		{
-			//Shift remaining file parts back one place to fill the gap
-			for (int i = clientPartIndex + 1; i < (int)fileData.partsOnClients; i++)
-			{
-				fileData.filePartDataArray[i - 1] = fileData.filePartDataArray[i];
-			}
-		}
-		*/
 
 		fileData.partsOnClients--; //There is one less client owned part now.
 		fileInfoMap->Insert(info.clientOwnedFiles[i], fileData);

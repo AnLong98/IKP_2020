@@ -23,6 +23,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerFunctions", "ServerFu
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerStressTest1", "ServerStressTest1\ServerStressTest1.vcxproj", "{11DF8FAE-0C60-4ABC-8A22-9B5FBA35FBF4}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerStressTest2", "ServerStressTest2\ServerStressTest2.vcxproj", "{43B7A943-407A-4D02-94DC-E46AFBA05F9C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -111,6 +113,14 @@ Global
 		{11DF8FAE-0C60-4ABC-8A22-9B5FBA35FBF4}.Release|x64.Build.0 = Release|x64
 		{11DF8FAE-0C60-4ABC-8A22-9B5FBA35FBF4}.Release|x86.ActiveCfg = Release|Win32
 		{11DF8FAE-0C60-4ABC-8A22-9B5FBA35FBF4}.Release|x86.Build.0 = Release|Win32
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Debug|x64.ActiveCfg = Debug|x64
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Debug|x64.Build.0 = Debug|x64
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Debug|x86.ActiveCfg = Debug|Win32
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Debug|x86.Build.0 = Debug|Win32
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Release|x64.ActiveCfg = Release|x64
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Release|x64.Build.0 = Release|x64
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Release|x86.ActiveCfg = Release|Win32
+		{43B7A943-407A-4D02-94DC-E46AFBA05F9C}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
