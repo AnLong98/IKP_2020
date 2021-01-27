@@ -107,7 +107,7 @@ int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 	*length = ntohl(atoi(buffer));
 
 	//Allocate memory for filePart
-	*data = (char*)malloc(((*length) + 1) * sizeof(char));
+	*data = (char*)malloc((*length + 1) * sizeof(char));
 	if (_heapchk() != _HEAPOK)
 		printf("HEAP ERROR P2PTFP 112");
 	if (*data == NULL)
@@ -134,7 +134,7 @@ int RecvFilePart(SOCKET s, char** data, unsigned int* length, int* partNumber)
 		}
 		bytesReceived += iResult;
 	} while (bytesReceived < (int)(*length));
-	*((*data) +(*length)) = '\0';
+	*((*data) + (*length)) = '\0';
 	return 0;
 }
 
