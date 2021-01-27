@@ -52,6 +52,7 @@ typedef struct OUT_AND_SERVER_THREAD_DATA
 	HANDLE* FinishSignal;
 	HANDLE* EmptyOutgoingQueue;
 	HANDLE* FullOutgoingQueue;
+	int* shutDownClient;
 
 }OS_DATA;
 
@@ -65,6 +66,7 @@ typedef struct INC_THREAD_DATA
 	HashMap<SOCKET>* processingSocketsMap;
 	HANDLE* FinishSignal;
 	HANDLE* FullIncomingQueue;
+	int* shutDownClient;
 
 }I_DATA;
 

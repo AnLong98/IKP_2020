@@ -38,6 +38,7 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param);
 
 int main(void)
 {
+
 	{
 		//Server and OutgoingFilePartRequest data
 		Queue<CLIENT_FILE_PART> outgoingRequestQueue; //Queue for Outgoing Requests to other clients.
@@ -54,9 +55,11 @@ int main(void)
 		//Common data
 		HANDLE FinishSignal;						  //Semaphore for signalizing abort to threads.
 		LinkedList<CLIENT_FILE_PART_INFO> fileParts;  //LinkedList where we store parts that we need to provide to other clients.
-		
+		int shutDownClient = 1;
+
 		LinkedList<SOCKET> acceptedSockets;
 		int socketsTaken = 0;
+
 
 		if (InitializeWindowsSockets() == false)
 		{
@@ -132,6 +135,7 @@ int main(void)
 			outServerThreadData.FinishSignal = &FinishSignal;
 			outServerThreadData.EmptyOutgoingQueue = &EmptyOutgoingQueue;
 			outServerThreadData.FullOutgoingQueue = &FullOutgoingQueue;
+			outServerThreadData.shutDownClient = &shutDownClient;
 
 			//init inc thread data
 			INC_THREAD_DATA incThreadData;
@@ -140,6 +144,7 @@ int main(void)
 			incThreadData.processingSocketsMap = &processingSocketsMap;
 			incThreadData.FinishSignal = &FinishSignal;
 			incThreadData.FullIncomingQueue = &FullIncomingQueue;
+			incThreadData.shutDownClient = &shutDownClient;
 
 			for (int i = 0; i < OUT_QUEUE_THREADS; i++)
 			{
@@ -200,7 +205,6 @@ int main(void)
 		{
 			printf("getsockname() failed.\n"); return -1;
 		}
-
 		//Creating thread for communication with server
 		servProc = CreateThread(NULL, 0, &ProcessConnectionToServer, (LPVOID)&outServerThreadData, 0, &servProcID);
 
@@ -224,7 +228,7 @@ int main(void)
 		}
 
 
-		while (true)
+		while (shutDownClient)
 		{
 			FD_ZERO(&readfds);
 			FD_SET(listenSocket, &readfds);
@@ -276,6 +280,7 @@ int main(void)
 					else
 					{
 						printf("\nCouldn't accept new connection");
+						shutDownClient = 0;
 						break;
 					}
 				}
@@ -326,16 +331,16 @@ int main(void)
 		if (sockets != NULL)
 			free(sockets);
 
-
 		// cleanup
 		closesocket(listenSocket);
 		WSACleanup();
 
 		//ClearFilePartsLinkedList(&fileParts); //need to be implemented. free LinkedList fileParts !
-
+		
 		DeleteWholeFileManagementHandle();
 		DeleteFileAccessManagementHandle();
 		DeleteConnectionsHandle();
+
 	}
 
 	printf("\nPress any key to close");
@@ -364,7 +369,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 	SOCKET* listenSocket = outServerThreadData.listenSocket;
 	CLIENT_DOWNLOADING_FILE* wholeFile = outServerThreadData.wholeFile;
 	LinkedList<CLIENT_FILE_PART_INFO>* fileParts = outServerThreadData.fileParts;
-
+	int* shutDownClient = outServerThreadData.shutDownClient;
 	SOCKET connectSocket = INVALID_SOCKET;
 
 	connectSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -402,9 +407,9 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 	FILE_REQUEST file;
 	char filename[MAX_FILE_NAME] = { 0 };
 
-	while (true)
+	while (*shutDownClient)
 	{
-		printf("\n\nEnter a file name: ");
+		printf("\n\n---Example: stefan.txt ---\nEnter a file name: ");
 		gets_s(file.fileName, MAX_FILE_NAME);
 
 		InetPton(AF_INET, TEXT("127.0.0.1"), &socketAddress.sin_addr.s_addr);
@@ -413,12 +418,17 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		printf("\n\n--------PORT-----------");
 		printf("%d\n\n", socketAddress.sin_port);
 
+
 		//Sending request for file to server
-		if (SendFileRequest(connectSocket, file) == -1)
+		int result = SendFileRequest(connectSocket, file);
+		if (result == -1) //Shuting down client if server is not working
 		{
+		
+			printf("\nServer has disconnected while trying to send file request.");
 			ShutdownConnection(connectSocket);
 			ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
-			printf("\nSendFileRequest return an error. Releasing semaphores.");
+			printf("\nServer is down. Shuting down client.");
+			*shutDownClient = 0;
 			break;
 		}
 
@@ -427,11 +437,20 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		FILE_RESPONSE response;
 
 		//Recive response from server
-		if (RecvFileResponse(connectSocket, &response) == -1)
+		if (RecvFileResponse(connectSocket, &response) == -1) //Shuting down client if server is not working
 		{
+			printf("\nServer has disconnected while trying to recieve file response.");
 			ShutdownConnection(connectSocket);
 			ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
-			printf("\nRecvFileResponse return an error. Releasing semaphores.");
+			printf("\nServer is down. Shuting down client.");
+			*shutDownClient = 0;
+			break;
+		}
+
+		if (!response.fileExists)
+		{
+			printf("\nFile does not exist on server. Try again with new file name.");
+			continue;
 		}
 
 		printf("\nResponse recieved from server. Waiting for parts from server...");
@@ -471,11 +490,14 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		// Recive file parts from server
 		for (int i = 0; i < (int)response.serverPartsNumber; i++)
 		{
-			if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1)
+			if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1) //Shuting down Client if server is down
 			{
-				printf("\nNe moze se RecvFilePart sa servera. %ld", WSAGetLastError());
+				printf("\nServer has disconnected while trying to recieve file part.");
 				ShutdownConnection(connectSocket);
 				ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
+				printf("\nServer is down. Shuting down client.");
+				*shutDownClient = 0;
+				break;
 			}
 
 			HandleRecievedFilePart(wholeFile, data, length, partNumber, fileParts);
@@ -509,7 +531,7 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		ResetWholeFile(wholeFile); //unutra ne treba kriticna sekcija. proveriti?????? 
 	}
 
-	printf("\nNit za komunikaciju sa serverom je odradila svoj deo posla...");
+	printf("\nServer communication thread has finished with work.");
 	return 0;
 }
 
@@ -521,10 +543,12 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 	SOCKET* listenSocket = outServerThreadData.listenSocket;
 	CLIENT_DOWNLOADING_FILE* wholeFile = outServerThreadData.wholeFile;
 	LinkedList<CLIENT_FILE_PART_INFO>* fileParts = outServerThreadData.fileParts;
+	int *shutDownClient = outServerThreadData.shutDownClient;
 
 
 	const int semaphoreNum = 2;
 	HANDLE semaphores[semaphoreNum] = { *(outServerThreadData.FinishSignal), *(outServerThreadData.FullOutgoingQueue) };
+	
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
 	{
 		printf("\nEntered in FullOutgoingRequestQueue");
@@ -549,19 +573,20 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 
 		sockaddr_in clientAddress = filePart.filePartInfo.clientOwnerAddress;
 
+		//Unable to connect to client, release semaphore
 		if (connect(connectSocket, (SOCKADDR*)&clientAddress, sizeof(clientAddress)) == SOCKET_ERROR)
 		{
 			printf("Unable to connect to client.\n");
 			closesocket(connectSocket);
-			WSACleanup();
-			return 1;
+			ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
+			//return 1; //videti ovo
 		}
 
-		if (SendFilePartRequest(connectSocket, partRequest) == -1)
+		if (SendFilePartRequest(connectSocket, partRequest) == -1) //Client unreachable, finish work here.
 		{
-			printf("\nGreska prilikom slanja zahteva za delic od klijenta.");
-			ShutdownConnection(connectSocket);
-			ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
+			printf("\nClient has disconnected while trying to send file part request.");
+			ShutdownConnection(connectSocket); //check if this is ok
+			ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
 		}
 
 		printf("\nFilePartRequest je poslat. Cekamo na odgovor Klijenta...");
@@ -570,11 +595,11 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 		unsigned int length = 0;
 		int partNumber = -1;
 
-		if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1)
+		if (RecvFilePart(connectSocket, &data, &length, &partNumber) == -1) //Client unreachable, finish work here.
 		{
-			printf("\nNeuspelo primanje delica od klijenta.");
-			ShutdownConnection(connectSocket);
-			ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
+			printf("\nClient has disconnected while trying to recieve file part.");
+			ShutdownConnection(connectSocket); //check if this is ok
+			ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
 		}
 
 		struct sockaddr_in socketAddress;
@@ -582,9 +607,10 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 
 		if (getsockname(*listenSocket, (sockaddr *)&socketAddress, &socketAddress_len) == -1)
 		{
-			printf("getsockname() failed.\n"); return -1;
+			printf("getsockname() failed.\n"); 
+			return -1;
 		}
-
+		
 		CLIENT_FILE_PART_INFO filePartInfo;
 
 		HandleRecievedFilePart(wholeFile, data, length, partNumber, fileParts);
@@ -596,6 +622,7 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 		printf("\nReleased EmptyOutgoingQueue.");
 	}
 
+	printf("\nOUTREQUEST NIT SE ZAVRSILA");
 	return 0;
 }
 
@@ -605,12 +632,12 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 	Queue<SOCKET>* incomingRequestQueue = incThreadData.incomingRequestQueue;
 	HashMap<SOCKET>* processingSocketsMap = incThreadData.processingSocketsMap;
 	LinkedList<CLIENT_FILE_PART_INFO>* fileParts = incThreadData.fileParts;
+	int* shutDownClient = incThreadData.shutDownClient;
 
 	const int semaphoreNum = 2;
 	HANDLE semaphores[semaphoreNum] = { *(incThreadData.FinishSignal), *(incThreadData.FullIncomingQueue) };
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
 	{
-		printf("\nZauzet FullIncomingQueue");
 
 		SOCKET requestSocket;
 
@@ -619,21 +646,26 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 		if (getResult == 0)
 			continue;
 
-		printf("\nUzet socket sa IncReqQueue.");
+		printf("\nTaken from IncomingRequestQueue");
+
+		//Convert socket to string so we can use it as key
+		char socketBuffer[SOCKET_BUFFER_SIZE];
+		sprintf_s(socketBuffer, "%d", requestSocket);
 
 		FILE_PART_REQUEST partRequest;
 
 		//Recieve file part request
-		int iResult = RecvFilePartRequest(requestSocket, &partRequest);
-		if (iResult == -1)
+		int iResult = RecvFilePartRequest(requestSocket, &partRequest); 
+
+		if (iResult == -1) //Error recieving, finish work here.
 		{
-			printf("\nGreska u FullIncQueue prilikom primanja delica od klijenta.");
+			printf("\nClient has disconnected while tring to recieve file part request.");
 			ShutdownConnection(requestSocket);
-			ReleaseSemaphore(*(incThreadData.FinishSignal), ALL_THREADS, NULL);
+
+			processingSocketsMap->Delete((const char*)(socketBuffer));
 		}
 
 		CLIENT_FILE_PART_INFO partToSend;
-
 
 		int partNumber = 0;
 
@@ -654,20 +686,17 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 		//Sending file part to client
 		if (SendFilePart(requestSocket, partToSend.partBuffer, partToSend.length, partNumber) == -1)
 		{
-			printf("\nGreska u FullIncQueue prilikom slanja dela sa klijenta - klijentu.");
+			printf("\nClient has disconnected while trying to send file part to him.");
 			ShutdownConnection(requestSocket);
-			ReleaseSemaphore(*(incThreadData.FinishSignal), ALL_THREADS, NULL);
+			processingSocketsMap->Delete((const char*)(socketBuffer));
 		}
 
 		free(partToSend.partBuffer);
 
 		printf("\nPoslato s klijenta - klijentu");
-
-		char socketBuffer[SOCKET_BUFFER_SIZE];
-		sprintf_s(socketBuffer, "%d", requestSocket);
-
 		processingSocketsMap->Delete((const char*)(socketBuffer));
 	}
 
+	printf("\nINCREQUEST NIT SE ZAVRSILA");
 	return 0;
 }
