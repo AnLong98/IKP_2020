@@ -24,6 +24,16 @@ void InitWholeFileManagementHandle();
 void DeleteWholeFileManagementHandle();
 
 /*
+	De-allocating dynamically allocated memory that list Nodes consume.
+
+	fileParts - Pointer to LinkedList 
+
+	Does not have a return value.
+	THREAD SAFE
+*/
+void ClearFilePartsLinkedList(LinkedList<CLIENT_FILE_PART_INFO>* fileParts);
+
+/*
 	Initializes CLIENT_DOWNLOADING_FILE struct, which is used to assemble file parts into one.
 
 
@@ -61,7 +71,7 @@ void ResetWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile);
 
 
 	Returns 0 if successfull, -2 if library handles are not initialized.
-	THREAD SAFE
+	THREAD UNSAFE
 */
 int HandleRecievedFilePart(CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int length, int partNumber, LinkedList<CLIENT_FILE_PART_INFO>* fileParts);
 
@@ -90,4 +100,6 @@ int FindFilePart(LinkedList<CLIENT_FILE_PART_INFO>* fileParts, CLIENT_FILE_PART_
 	THREAD UNSAFE
 */
 int WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile);
+
+
 

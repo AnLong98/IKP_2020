@@ -8,6 +8,7 @@ int isInitFileManagerHandle = 0;
 
 CRITICAL_SECTION WholeFileAccess;
 int isInitWholeFileManagerHandle = 0;
+int isWholeFileInitialized = 0;
 
 void InitFileAcessManagementHandle()
 {
@@ -33,6 +34,18 @@ void DeleteWholeFileManagementHandle()
 	isInitWholeFileManagerHandle = 0;
 }
 
+void ClearFilePartsLinkedList(LinkedList<CLIENT_FILE_PART_INFO>* fileParts)
+{
+	EnterCriticalSection(&FilePartAccess);
+	ListNode<CLIENT_FILE_PART_INFO>* nodeFront = fileParts->AcquireIteratorNodeFront();
+	while (nodeFront != nullptr)
+	{
+		free(nodeFront->GetValue().partBuffer);
+		nodeFront = nodeFront->Next();
+	}
+	LeaveCriticalSection(&FilePartAccess);
+}
+
 int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPONSE response)
 {
 	if(!isInitWholeFileManagerHandle)
@@ -42,7 +55,6 @@ int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPO
 	memset(wholeFile, 0, sizeof(wholeFile));
 	strcpy(wholeFile->fileName, fileName);
 
-	//part to store
 	wholeFile->filePartToStore = response.filePartToStore;
 	wholeFile->fileSize = response.fileSize;
 	wholeFile->partsDownloaded = 0;
@@ -51,18 +63,20 @@ int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPO
 
 	wholeFile->bufferPointer = (char*)malloc((fileSize + 1) * sizeof(char));
 	LeaveCriticalSection(&WholeFileAccess);
-	
+	isWholeFileInitialized = 1;
+
 	return 0;
 }
 
 void ResetWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile)
 {
-	EnterCriticalSection(&WholeFileAccess);
-	free(wholeFile->bufferPointer);
-	wholeFile->bufferPointer = NULL;
-	wholeFile->partsDownloaded = 0;
-	wholeFile->fileSize = 0;
-	LeaveCriticalSection(&WholeFileAccess);
+	if (isWholeFileInitialized) 
+	{
+		free(wholeFile->bufferPointer);
+		wholeFile->bufferPointer = NULL;
+		wholeFile->partsDownloaded = 0;
+		wholeFile->fileSize = 0;
+	}
 }
 
 int HandleRecievedFilePart(CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int length, int partNumber, LinkedList<CLIENT_FILE_PART_INFO>* fileParts)
@@ -140,7 +154,6 @@ int WriteWholeFileIntoMemory(char* dirName, CLIENT_DOWNLOADING_FILE wholeFile)
 	return 0;
 }
 
-//int, da znamo da li smo nasli taj deo ili ne . i proveriti u kliijentu da li postoji taj delic
 int FindFilePart(LinkedList<CLIENT_FILE_PART_INFO>* fileParts, CLIENT_FILE_PART_INFO* partToSend, char fileName[])
 {
 	if (!isInitFileManagerHandle)

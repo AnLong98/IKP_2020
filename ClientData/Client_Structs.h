@@ -63,6 +63,7 @@ typedef struct INC_THREAD_DATA
 {
 	Queue<SOCKET>* incomingRequestQueue;
 	LinkedList<CLIENT_FILE_PART_INFO>* fileParts;
+	LinkedList<SOCKET>* acceptedSockets;
 	HashMap<SOCKET>* processingSocketsMap;
 	HANDLE* FinishSignal;
 	HANDLE* FullIncomingQueue;
