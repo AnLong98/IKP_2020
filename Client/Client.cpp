@@ -301,7 +301,7 @@ int main(void)
 			}
 		}
 
-		printf("\nClient is not listening any more");
+		printf("\nClient is not listening any more. Shutting him down.");
 
 		for (int i = 0; i < CLIENT_THREADS; i++)
 			WaitForSingleObject(processors[i], 2000);
@@ -334,7 +334,7 @@ int main(void)
 		closesocket(listenSocket);
 		    
 		ClearFilePartsLinkedList(&fileParts); 
-		//ResetWholeFile(&wholeFile);
+		ResetWholeFile(&wholeFile);
 		
 		DeleteWholeFileManagementHandle();
 		DeleteFileAccessManagementHandle();
@@ -343,7 +343,7 @@ int main(void)
 		WSACleanup();
 	}
 
-	printf("\nPress any key to close");
+	printf("\nClient is down.\n\nPress any key to close...");
 	_getch();
 	return 0;
 }
@@ -427,7 +427,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		{
 			printf("\nServer has disconnected while trying to send file request.");
 			ShutdownConnection(connectSocket);
-			//ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
 			printf("\nServer is down. Shuting down client.");
 			*shutDownClient = 0;
 			break;
@@ -442,7 +441,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		{
 			printf("\nServer has disconnected while trying to recieve file response.");
 			ShutdownConnection(connectSocket);
-			//ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
 			printf("\nServer is down. Shuting down client.");
 			*shutDownClient = 0;
 			break;
@@ -469,8 +467,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 
 			if (waitResult == WAIT_OBJECT_0 + 1)
 			{
-				printf("\nEmptyOutQueue taken");
-
 				memcpy(clientFilePart.fileName, file.fileName, MAX_FILE_NAME);
 				clientFilePart.filePartInfo.clientOwnerAddress = response.clientParts[i].clientOwnerAddress;
 				clientFilePart.filePartInfo.partNumber = response.clientParts[i].partNumber;
@@ -478,7 +474,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 				outgoingRequestQueue->Enqueue(clientFilePart);
 
 				ReleaseSemaphore(*(outServerThreadData.FullOutgoingQueue), 1, NULL);
-				printf("\nFullOutQueue released");
 			}
 		}
 
@@ -495,7 +490,6 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 			{
 				printf("\nServer has disconnected while trying to recieve file part.");
 				ShutdownConnection(connectSocket);
-				//ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
 				printf("\nServer is down. Shuting down client.");
 				*shutDownClient = 0;
 				break;
@@ -522,14 +516,18 @@ DWORD WINAPI ProcessConnectionToServer(LPVOID param)
 		strcpy_s(dirName,strlen(ip) + 1, ip);
 		strcat(dirName, port);
 
-		if (WriteWholeFileIntoMemory(dirName, *wholeFile) != 0)
+		if (WriteWholeFileIntoMemory(dirName, *wholeFile) != 0) //Throwing information to client that file is not writen on disk.
 		{
-			printf("\nCouldn't write buffer into memory."); //koji jos hendle baciti ovde, mislim da je okej da se izvrsi ovo dole i da mu dozvolimo da opet upise fajl koji zeli 
+			printf("\nCouldn't write buffer on disk."); 
+		}
+		else
+		{
+			printf("\nFile is written on disk.");
 		}
 
 		free(dirName);
 		dirName = NULL;
-		ResetWholeFile(wholeFile); //unutra ne treba kriticna sekcija. proveriti?????? 
+		ResetWholeFile(wholeFile); 
 	}
 
 	ReleaseSemaphore(*(outServerThreadData.FinishSignal), ALL_THREADS, NULL);
@@ -553,10 +551,11 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 	
 	while (WaitForMultipleObjects(semaphoreNum, semaphores, FALSE, INFINITE) == WAIT_OBJECT_0 + 1)
 	{
-		printf("\nEntered in FullOutgoingRequestQueue");
 
 		CLIENT_FILE_PART filePart;
 		outgoingRequestQueue->DequeueGet(&filePart);
+
+		printf("\nDequeued from OutgoingRequestQueue");
 
 		FILE_PART_REQUEST partRequest;
 		memcpy(partRequest.fileName, filePart.fileName, MAX_FILE_NAME);
@@ -591,7 +590,7 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 			ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
 		}
 
-		printf("\nFilePartRequest je poslat. Cekamo na odgovor Klijenta...");
+		printf("\nFilePartRequest sent. Waiting response from Client...");
 
 		char* data = NULL;
 		unsigned int length = 0;
@@ -621,7 +620,6 @@ DWORD WINAPI ProcessOutgoingFilePartRequest(LPVOID param)
 		data = NULL;
 
 		ReleaseSemaphore(*(outServerThreadData.EmptyOutgoingQueue), 1, NULL);
-		printf("\nReleased EmptyOutgoingQueue.");
 	}
 
 	return 0;
@@ -648,7 +646,7 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 		if (getResult == 0)
 			continue;
 
-		printf("\nTaken from IncomingRequestQueue");
+		printf("\nDequeued request from IncomingRequestQueue");
 
 		//Convert socket to string so we can use it as key
 		char socketBuffer[SOCKET_BUFFER_SIZE];
@@ -702,7 +700,7 @@ DWORD WINAPI ProccessIncomingFilePartRequest(LPVOID param)
 
 		free(partToSend.partBuffer);
 
-		printf("\nPoslato s klijenta - klijentu");
+		printf("\nPart sent from CLIENT to CLIENT.");
 		processingSocketsMap->Delete((const char*)(socketBuffer));
 	}
 

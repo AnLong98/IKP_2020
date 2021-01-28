@@ -8,6 +8,7 @@ int isInitFileManagerHandle = 0;
 
 CRITICAL_SECTION WholeFileAccess;
 int isInitWholeFileManagerHandle = 0;
+int isWholeFileInitialized = 0;
 
 void InitFileAcessManagementHandle()
 {
@@ -62,16 +63,20 @@ int InitWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile, char* fileName, FILE_RESPO
 
 	wholeFile->bufferPointer = (char*)malloc((fileSize + 1) * sizeof(char));
 	LeaveCriticalSection(&WholeFileAccess);
-	
+	isWholeFileInitialized = 1;
+
 	return 0;
 }
 
 void ResetWholeFile(CLIENT_DOWNLOADING_FILE* wholeFile)
 {
-	free(wholeFile->bufferPointer);
-	wholeFile->bufferPointer = NULL;
-	wholeFile->partsDownloaded = 0;
-	wholeFile->fileSize = 0;
+	if (isWholeFileInitialized) 
+	{
+		free(wholeFile->bufferPointer);
+		wholeFile->bufferPointer = NULL;
+		wholeFile->partsDownloaded = 0;
+		wholeFile->fileSize = 0;
+	}
 }
 
 int HandleRecievedFilePart(CLIENT_DOWNLOADING_FILE* wholeFile, char* data, int length, int partNumber, LinkedList<CLIENT_FILE_PART_INFO>* fileParts)
